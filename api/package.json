@@ -1,0 +1,38 @@
+{
+  "name": "merchantos-api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.3.10",
+    "@nestjs/core": "^10.3.10",
+    "@nestjs/platform-fastify": "^10.3.10",
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/config": "^3.2.0",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8",
+    "nanoid": "^5.0.7",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "@merchantos/shared-types": "file:../packages/shared-types",
+    "@merchantos/money": "file:../packages/money",
+    "@merchantos/crypto": "file:../packages/crypto",
+    "@merchantos/validation": "file:../packages/validation",
+    "@merchantos/payments": "file:../packages/payments",
+    "@merchantos/qr": "file:../packages/qr",
+    "@merchantos/security": "file:../packages/security"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.6",
+    "@types/express": "^5.0.0",
+    "typescript": "5.5.4",
+    "tsx": "^4.16.0"
+  }
+}

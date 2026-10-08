@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Seeds a demo merchant, store, and a small product catalog.
+# Idempotent: re-running only fills what's missing.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+: "${PGUSER:=postgres}"; : "${PGHOST:=127.0.0.1}"; : "${PGPORT:=5432}"; : "${PGDATABASE:=merchantos}"
+export PGUSER PGHOST PGPORT PGDATABASE
+
+psql -v ON_ERROR_STOP=1 <<'SQL'
+-- One demo merchant
+INSERT INTO merchants (id, name, owner_email, phone)
+VALUES ('01H0000000000000000000000', 'Aaditya Demo Stores', 'owner@aaditya.test', '+91-99999-00000')
+ON CONFLICT (id) DO NOTHING;
+
+-- Two demo stores
+INSERT INTO stores (id, merchant_id, name, address, city, state, pincode, phone) VALUES
+  ('01H0000000000000000000001', '01H0000000000000000000000', 'Main Street Outlet', '12 MG Road', 'Bengaluru', 'KA', '560001', '+91-99999-11111'),
+  ('01H0000000000000000000002', '01H0000000000000000000000', 'Indiranagar Outlet', '100 Feet Rd', 'Bengaluru', 'KA', '560038', '+91-99999-22222')
+ON CONFLICT (id) DO NOTHING;
+
+-- Products (4 SKUs in main store)
+INSERT INTO products (id, merchant_id, store_id, sku, barcode, name, category, price_minor, cost_minor, currency, tax_bps, stock_count, low_stock_threshold) VALUES
+  ('01H000000000000000000000A', '01H0000000000000000000000', '01H0000000000000000000001', 'SKU-MILK500', '8900000000017', 'Milk 500ml', 'Dairy', '5000', '3500', 'INR', 0, 100, 10),
+  ('01H000000000000000000000B', '01H0000000000000000000000', '01H0000000000000000000001', 'SKU-BREAD',  '8900000000024', 'Whole Wheat Bread', 'Bakery', '4500', '2500', 'INR', 0, 50, 5),
+  ('01H000000000000000000000C', '01H0000000000000000000000', '01H0000000000000000000001', 'SKU-EGGS12', '8900000000031', 'Eggs (12 pack)', 'Dairy', '7800', '6000', 'INR', 0, 40, 6),
+  ('01H000000000000000000000D', '01H0000000000000000000000', '01H0000000000000000000001', 'SKU-BUTTER', '8900000000048', 'Salted Butter 100g', 'Dairy', '5500', '4000', 'INR', 0, 60, 8)
+ON CONFLICT (id) DO NOTHING;
+
+-- Demo customer
+INSERT INTO customers (id, merchant_id, store_id, name, phone)
+VALUES ('01H000000000000000000000F', '01H0000000000000000000000', '01H0000000000000000000001', 'Rahul Kumar', '+91-99999-00001')
+ON CONFLICT (id) DO NOTHING;
+
+-- Note: users are NOT seeded here. Run `bin/create-user` to set the password.
+SQL
+
+echo "Seeded merchant, stores, products, customer."
+echo "Next: cd api && node scripts/create-user.js owner@aaditya.test merchantos OWNER 01H0000000000000000000001"

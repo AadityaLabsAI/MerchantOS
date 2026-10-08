@@ -1,0 +1,17 @@
+{
+  "name": "@merchantos/payments",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@merchantos/money": "file:../money",
+    "@merchantos/crypto": "file:../crypto"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4",
+    "@types/node": "^20.0.0"
+  }
+}

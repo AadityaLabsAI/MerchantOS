@@ -1,0 +1,25 @@
+{
+  "name": "merchantos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MerchantOS — offline-first POS, billing, payments, khata. 100% self-hosted, zero third-party dependencies.",
+  "license": "MIT",
+  "scripts": {
+    "build:packages": "for p in packages/*/; do (cd \"$p\" && npm install --no-audit --no-fund && npm run build); done",
+    "build:api": "cd api && npm install --no-audit --no-fund && npm run build",
+    "build": "npm run build:packages && npm run build:api",
+    "migrate": "bin/migrate",
+    "seed": "bin/seed",
+    "dev": "cd api && npm run dev",
+    "start": "cd api && npm start"
+  },
+  "dependencies": {
+    "pg": "^8.12.0"
+  },
+  "workspaces": [
+    "packages/security"
+  ],
+  "devDependencies": {
+    "typescript": "5.4"
+  }
+}
