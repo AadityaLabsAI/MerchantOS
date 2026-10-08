@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0 — 2026-10-08
+
+Package release. (Add release notes here.)
+
+- Version bump to 1.3.0 to match this release artifact.
+- See repo history for the full set of changes since 1.2.2.
+
 ## 1.2.2 — 2026-10-08
 
 **First-class UI** — full single-page app served from `/`, polished pay page at `/pay/:token`.

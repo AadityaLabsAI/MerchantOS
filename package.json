@@ -1,6 +1,6 @@
 {
   "name": "merchantos",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "private": true,
   "description": "MerchantOS — offline-first POS, billing, payments, khata. 100% self-hosted, zero third-party dependencies.",
   "license": "MIT",
