@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: merchantos
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -29,7 +29,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/merchantos
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/merchantos
       DATABASE_SSL: "false"
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set in .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set in .env}
