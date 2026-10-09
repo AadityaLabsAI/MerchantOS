@@ -37,6 +37,7 @@ services:
       API_BASE_URL: ${API_BASE_URL:-http://localhost:4000}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:4000}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       AI_ENABLED: ${AI_ENABLED:-false}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       SEED_USER_EMAIL: ${SEED_USER_EMAIL:-owner@merchantos.local}
