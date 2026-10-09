@@ -16,7 +16,7 @@ import { Audit } from '../audit/audit.service.js';
 const RefreshInput = z.object({ refreshToken: z.string().min(1) });
 
 function ttlToMs(ttl: string): number {
-  const match = /^(\\d+)(ms|s|m|h|d)$/.exec(ttl);
+  const match = /^(\d+)(ms|s|m|h|d)$/.exec(ttl);
   if (!match) throw new Error('invalid configured TTL');
   const n = Number(match[1]);
   const multiplier = match[2] === 'ms' ? 1 : match[2] === 's' ? 1000 : match[2] === 'm' ? 60_000 : match[2] === 'h' ? 3_600_000 : 86_400_000;
