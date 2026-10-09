@@ -44,6 +44,8 @@ for f in $(ls database/migrations/*.sql | sort); do
   else
     echo "[apply] $base"
     psql -v ON_ERROR_STOP=1 -f "$f"
+    # Record success only after the entire migration file has applied.
+    psql -v ON_ERROR_STOP=1 -c "INSERT INTO schema_migrations (version, description) VALUES ('$base', '$base') ON CONFLICT (version) DO NOTHING"
   fi
 done
 
