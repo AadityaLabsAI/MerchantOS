@@ -20,7 +20,7 @@ export function getPool(): Pool {
     // TCP keepalive so dead connections (NAT, firewall) are detected.
     keepAlive: true,
     keepAliveInitialDelayMillis: 10_000,
-    ssl: cfg.DATABASE_SSL ? { rejectUnauthorized: false } : false,
+    ssl: cfg.DATABASE_SSL ? { rejectUnauthorized: true } : false,
   });
   _pool.on('error', (err) => {
     console.error('[pg] idle client error', err.message);
