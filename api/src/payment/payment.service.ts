@@ -81,8 +81,8 @@ export class PaymentService {
       }
 
       // Authoritative amount check: webhook amount MUST equal session amount.
-      if (BigInt(session.amount_minor) !== event.amount.minor) {
-        throw new BadRequestException('amount mismatch');
+      if (BigInt(session.amount_minor) !== event.amount.minor || session.currency !== event.amount.currency) {
+        throw new BadRequestException('amount or currency mismatch');
       }
 
       // Compute the target state by walking the legal transitions from the current state.
