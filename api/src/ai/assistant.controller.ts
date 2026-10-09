@@ -67,7 +67,7 @@ async function fetchContext(merchantId: string, storeId: string): Promise<string
     `SELECT name, stock_count, low_stock_threshold FROM products WHERE merchant_id = $1 AND store_id = $2 AND stock_count <= low_stock_threshold ORDER BY stock_count LIMIT 5`,
     [merchantId, storeId]);
   const totalRupees = Number(today.rows[0].total) / 100;
-  return `Today sales: ₹${totalRupees.toFixed(2)} (${today.rows[0].cnt} bills).
+  return `Today verified payments: ₹${totalRupees.toFixed(2)} (${today.rows[0].cnt} payments).
 Top 7-day products: ${top.rows.map(r => `${escapeForContext(r.name)} (₹${Number(r.revenue)/100})`).join(', ') || 'none'}.
 Low stock: ${lowStock.rows.map(r => `${escapeForContext(r.name)} (${r.stock_count} left)`).join(', ') || 'all good'}.`;
 }
