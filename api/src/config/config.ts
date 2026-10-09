@@ -33,6 +33,11 @@ const Schema = z.object({
   TRUSTED_PROXIES: z.string().default(''),
 
   PAYMENT_DEFAULT_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+  // Development-only simulator; disabled by default and never allowed in production.
+  ENABLE_PAYMENT_SIMULATOR: z.preprocess(
+    (v) => v === undefined ? false : (typeof v === 'string' ? v.toLowerCase() === 'true' : v),
+    z.boolean()
+  ).default(false),
 
   // AI defaults to OFF so the API boots cleanly without Ollama.
   // Operators explicitly opt in by setting AI_ENABLED=true in .env.
