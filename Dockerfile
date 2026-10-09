@@ -54,6 +54,7 @@ ENV PORT=4000
 # Copy only what runtime needs
 COPY --from=build /src/api/dist          /app/api/dist
 COPY --from=build /src/api/package.json   /app/api/package.json
+COPY --from=build /src/api/src/landing /app/api/src/landing
 COPY --from=build /src/api/node_modules   /app/api/node_modules
 COPY --from=build /src/packages           /app/packages
 COPY --from=build /src/bin                /app/bin
