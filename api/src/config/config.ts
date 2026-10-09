@@ -29,6 +29,8 @@ const Schema = z.object({
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
   WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
   CORS_ORIGINS: z.string().default(''),
+  // Comma-separated exact proxy IPs/CIDRs trusted for forwarded headers. Empty means trust none.
+  TRUSTED_PROXIES: z.string().default(''),
 
   PAYMENT_DEFAULT_TTL_SECONDS: z.coerce.number().int().positive().default(600),
 
