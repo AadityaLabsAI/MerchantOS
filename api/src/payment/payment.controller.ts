@@ -1,6 +1,7 @@
 // Payment endpoints: session create, public pay page, webhook receiver.
 import { Body, Controller, Get, Header, Module, Param, Post, Query, Req, Res, HttpException, BadRequestException, HttpCode, UseGuards } from '@nestjs/common';
 import { CreatePaymentSessionInput } from '@merchantos/validation';
+import { z } from 'zod';
 import { PERMISSIONS } from '@merchantos/shared-types';
 import { query } from '../db/db.js';
 import { AuthGuard, Public } from '../auth/auth.guard.js';
@@ -8,6 +9,15 @@ import { Permissions, PermissionsGuard } from '../rbac/rbac.guard.js';
 import { assertStoreAccess } from '../rbac/store-access.js';
 import { loadConfig } from '../config/config.js';
 import { PaymentService } from './payment.service.js';
+
+const PaymentWebhookInput = z.object({
+  id: z.string().min(1).max(200),
+  type: z.enum(['payment.succeeded', 'payment.failed', 'payment.processing', 'payment.expired', 'payment.refunded', 'payment.cancelled']),
+  providerSessionId: z.string().min(1).max(200),
+  providerPaymentId: z.string().min(1).max(200).optional(),
+  amount: z.object({ currency: z.string().length(3), minor: z.string().regex(/^\\d+$/) }).strict(),
+  occurredAt: z.string().datetime(),
+}).strict();
 
 @Controller('api/payments')
 @UseGuards(AuthGuard, PermissionsGuard)
@@ -66,13 +76,13 @@ const PAY_HTML = `<!doctype html>
 </head>
 <body>
 <div class="card">
-  <div class="brand">💼 MerchantOS · Secure payment</div>
+  <div class="brand">💼 MerchantOS · SANDBOX DEMO</div>
   <div id="statePill" class="state pending">Loading...</div>
   <div class="amt" id="amt">—</div>
   <div class="desc" id="desc"></div>
   <button id="btn" disabled>Pay now</button>
   <div class="info" id="info"></div>
-  <div class="secure">🔒 Verified payment · No card details collected</div>
+  <div class="secure">DEMO ONLY · No real payment is collected</div>
 </div>
 <script>
 const token = location.pathname.split('/').pop();
@@ -92,7 +102,7 @@ async function load() {
     pill.textContent = label;
     const btn = document.getElementById('btn');
     if (p.state === 'VERIFIED' || p.state === 'SUCCESS') { btn.textContent = '✓ Paid'; btn.disabled = true; }
-    else if (p.state === 'CREATED' || p.state === 'PENDING') { btn.textContent = '✓ I have paid'; btn.disabled = false; btn.onclick = simulate; }
+    else if (p.state === 'CREATED' || p.state === 'PENDING') { btn.textContent = 'Simulate demo payment'; btn.disabled = false; btn.onclick = simulate; }
     else { btn.textContent = '—'; btn.disabled = true; }
     const exp = new Date(p.expiresAt);
     document.getElementById('info').textContent = (p.state === 'CREATED' || p.state === 'PENDING') ? 'Expires ' + exp.toLocaleString() : '';
@@ -150,7 +160,10 @@ export class WebhookController {
     const body = (req.rawBody ?? Buffer.alloc(0)).toString('utf8');
     const verify = this.svc.verifyWebhook({ body, signature: String(sig), timestamp: ts });
     if (!verify.verified) throw new HttpException({ code: 'INVALID_SIGNATURE', message: `signature invalid: ${verify.failureReason}` }, 401);
-    const payload = JSON.parse(body);
+    let decoded: unknown;
+    try { decoded = JSON.parse(body); }
+    catch { throw new BadRequestException('invalid webhook JSON'); }
+    const payload = PaymentWebhookInput.parse(decoded);
     const result = await this.svc.handleWebhook({
       eventId: payload.id,
       type: payload.type,
@@ -172,8 +185,9 @@ export class DevSimulateController {
   @Public()
   @Post('simulate-success')
   async simulate(@Query('token') token: string) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new HttpException({ code: 'DISABLED_IN_PRODUCTION', message: 'dev routes are disabled in production' }, 403);
+    const cfg = loadConfig();
+    if (cfg.NODE_ENV === 'production' || !cfg.ENABLE_PAYMENT_SIMULATOR) {
+      throw new HttpException({ code: 'SIMULATOR_DISABLED', message: 'sandbox payment simulation is disabled' }, 404);
     }
     if (!token) throw new BadRequestException('token required');
     const r = await query<{ provider_session_id: string; store_id: string; merchant_id: string }>(
