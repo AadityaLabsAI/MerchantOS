@@ -1,7 +1,7 @@
 // Payment service: state machine + in-house provider (no third-party).
 // Webhook signature is HMAC-SHA256 over `<ts>.<rawBody>`. Idempotent on (session_id, event_id).
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { ulid, randomToken, verifyWebhookSignature, signWebhookBody } from '@merchantos/crypto';
+import { ulid, generateOpaqueSecret, verifyWebhookSignature, signWebhookBody } from '@merchantos/crypto';
 import { moneyFromMinor } from '@merchantos/money';
 import { canTransition, type PaymentState } from '@merchantos/payments';
 import { query, withTx } from '../db/db.js';
@@ -36,7 +36,7 @@ export class PaymentService {
     const cfg = loadConfig();
     const id = ulid();
     const providerSessionId = `psess_${ulid()}`;
-    const paymentToken = `PAY-${randomToken(4, 4, '-')}`;
+    const paymentToken = `PAY-${generateOpaqueSecret(32)}`;
     const expiresAt = new Date(Date.now() + opts.ttlSeconds * 1000);
     await query(
       `INSERT INTO payment_sessions (id, payment_token, merchant_id, store_id, device_id, bill_id, customer_id, provider, provider_session_id, amount_minor, currency, description, state, expires_at)
@@ -50,7 +50,7 @@ export class PaymentService {
   async getByToken(token: string): Promise<{
     amount: { currency: string; minor: string }; description: string | null; expiresAt: Date; state: PaymentState; merchantId: string; storeId: string;
   }> {
-    const r = await query(
+    // Expire unpaid sessions on access; a link never remains payable indefinitely.\n    await query(\n      `UPDATE payment_sessions SET state = 'EXPIRED', updated_at = now()\n        WHERE payment_token = $1 AND state IN ('CREATED', 'PENDING') AND expires_at <= now()`,\n      [token],\n    );\n    const r = await query(
       `SELECT amount_minor, currency, description, expires_at, state, merchant_id, store_id
          FROM payment_sessions WHERE payment_token = $1`, [token]);
     if (!r.rows[0]) throw new NotFoundException('payment session not found');
@@ -173,10 +173,16 @@ export class PaymentService {
   async simulate(opts: { providerSessionId: string; type: 'payment.succeeded' }): Promise<{ rawBody: string; headers: Record<string, string> }> {
     if (process.env.NODE_ENV === 'production') throw new Error('simulator disabled in production');
     const cfg = loadConfig();
-    const r = await query<{ id: string; merchant_id: string; store_id: string; amount_minor: string; currency: string }>(
-      `SELECT id, merchant_id, store_id, amount_minor, currency FROM payment_sessions WHERE provider_session_id = $1`, [opts.providerSessionId]);
+    const r = await query<{ id: string; merchant_id: string; store_id: string; amount_minor: string; currency: string; state: PaymentState; expires_at: Date }>(
+      `SELECT id, merchant_id, store_id, amount_minor, currency, state, expires_at FROM payment_sessions WHERE provider_session_id = $1`, [opts.providerSessionId]);
     if (!r.rows[0]) throw new NotFoundException('session not found');
     const s = r.rows[0];
+    if (s.state === 'EXPIRED' || new Date(s.expires_at).getTime() <= Date.now()) {
+      throw new BadRequestException('payment session expired');
+    }
+    if (s.state === 'VERIFIED' || s.state === 'SUCCESS' || s.state === 'REFUNDED') {
+      throw new BadRequestException('payment session is already completed');
+    }
     const providerPaymentId = `ppay_${ulid()}`;
     const eventId = `pevt_${ulid()}`;
     const occurredAt = new Date();
