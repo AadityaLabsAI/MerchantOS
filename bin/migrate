@@ -6,12 +6,20 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 : "${DATABASE_URL:=postgres://postgres@127.0.0.1:5432/merchantos}"
-: "${PGUSER:=postgres}"
-: "${PGHOST:=127.0.0.1}"
-: "${PGPORT:=5432}"
-: "${PGDATABASE:=merchantos}"
 
-export PGUSER PGHOST PGPORT PGDATABASE
+# If PG* variables were not supplied explicitly, derive them from DATABASE_URL.
+# Use command substitutions instead of eval so credentials cannot become shell code.
+if [ -z "${PGHOST:-}" ] || [ -z "${PGPORT:-}" ] || [ -z "${PGUSER:-}" ] || [ -z "${PGDATABASE:-}" ]; then
+  PGHOST="${PGHOST:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(u.hostname)')}"
+  PGPORT="${PGPORT:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(u.port||"5432")')}"
+  PGUSER="${PGUSER:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(decodeURIComponent(u.username))')}"
+  PGDATABASE="${PGDATABASE:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(decodeURIComponent(u.pathname.replace(/^\\//,"")))')}"
+fi
+if [ -z "${PGPASSWORD:-}" ]; then
+  PGPASSWORD="$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(decodeURIComponent(u.password))')"
+fi
+: "${PGHOST:=127.0.0.1}"; : "${PGPORT:=5432}"; : "${PGUSER:=postgres}"; : "${PGDATABASE:=merchantos}"
+export PGHOST PGPORT PGUSER PGDATABASE PGPASSWORD
 
 if ! command -v psql >/dev/null 2>&1; then
   echo "psql not found. Install postgresql-client." >&2
@@ -36,6 +44,8 @@ for f in $(ls database/migrations/*.sql | sort); do
   else
     echo "[apply] $base"
     psql -v ON_ERROR_STOP=1 -f "$f"
+    # Record success only after the entire migration file has applied.
+    psql -v ON_ERROR_STOP=1 -c "INSERT INTO schema_migrations (version, description) VALUES ('$base', '$base') ON CONFLICT (version) DO NOTHING"
   fi
 done
 

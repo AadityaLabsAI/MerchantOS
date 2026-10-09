@@ -19,7 +19,7 @@ const CloseInput = z.object({
   notes: z.string().max(500).optional(),
 });
 const EntryInput = z.object({
-  type: z.string().min(1).max(50),
+  type: z.enum(['CASH_IN', 'CASH_OUT', 'CASH_ADJUSTMENT', 'NOTE']),
   amount: MoneySchema,
   description: z.string().max(200).optional(),
 });
@@ -73,10 +73,13 @@ export class ShiftController {
     const p = CloseInput.parse(body);
     let totalSalesMinor = '0';
     await withTx(async (c) => {
-      const r = await c.query<{ store_id: string; opened_at: Date; opened_by: string }>(
-        `SELECT store_id, opened_at, opened_by FROM shifts WHERE id = $1 AND merchant_id = $2 AND state = 'OPEN' FOR UPDATE`,
+      const r = await c.query<{ store_id: string; opened_at: Date; opened_by: string; opening_cash_currency: string }>(
+        `SELECT store_id, opened_at, opened_by, opening_cash_currency FROM shifts WHERE id = $1 AND merchant_id = $2 AND state = 'OPEN' FOR UPDATE`,
         [shiftId, req.auth.merchantId]);
       if (!r.rows[0]) throw new NotFoundException('no open shift');
+      if (r.rows[0].opening_cash_currency !== p.closingCash.currency) {
+        throw new BadRequestException('closing cash currency must match opening cash currency');
+      }
       // Only OWNER or the shift opener may close it.
       if (req.auth.role !== 'OWNER' && r.rows[0].opened_by !== req.auth.userId) {
         throw new HttpException('only the opener or an OWNER can close this shift', 403);
@@ -84,8 +87,9 @@ export class ShiftController {
       const salesRes = await c.query<{ total: string }>(
         `SELECT COALESCE(SUM((p.amount_minor)::bigint), 0) AS total
            FROM payments p JOIN payment_sessions s ON s.id = p.payment_session_id
-          WHERE s.store_id = $1 AND p.paid_at >= $2 AND p.paid_at < now()`,
-        [r.rows[0].store_id, r.rows[0].opened_at]);
+          WHERE s.merchant_id = $1 AND s.store_id = $2 AND s.state = 'VERIFIED'
+            AND p.currency = $4 AND p.paid_at >= $3 AND p.paid_at < now()`,
+        [req.auth.merchantId, r.rows[0].store_id, r.rows[0].opened_at, p.closingCash.currency]);
       totalSalesMinor = salesRes.rows[0].total.toString();
       await c.query(
         `UPDATE shifts SET state='CLOSED', closed_by=$1, closed_at=now(), closing_cash_minor=$2, closing_cash_currency=$3, notes=$4, total_sales_minor=$5, total_sales_currency=$3 WHERE id=$6`,
@@ -106,6 +110,8 @@ export class ShiftController {
       `SELECT store_id, state FROM shifts WHERE id = $1 AND merchant_id = $2`, [shiftId, req.auth.merchantId]);
     if (!s.rows[0]) throw new NotFoundException();
     if (s.rows[0].state !== 'OPEN') throw new BadRequestException('shift is not open');
+    const currencyRes = await query<{ opening_cash_currency: string }>(`SELECT opening_cash_currency FROM shifts WHERE id = $1`, [shiftId]);
+    if (currencyRes.rows[0]?.opening_cash_currency !== p.amount.currency) throw new BadRequestException('entry currency must match shift currency');
     await assertStoreAccess(req.auth, s.rows[0].store_id);
     await query(
       `INSERT INTO shift_entries (id, shift_id, type, amount_minor, currency, description) VALUES ($1, $2, $3, $4, $5, $6)`,

@@ -1,6 +1,7 @@
 // MerchantOS v1.3 — Single-page app, no build step
 const $ = (s, r=document) => r.querySelector(s);
-const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const $ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtINR = (m) => '₹' + (Number(m||0)/100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtINRshort = (m) => {
   const n = Number(m||0)/100;
@@ -14,8 +15,8 @@ const fmtTime = (s) => { try { return new Date(s).toLocaleTimeString('en-IN', { 
 
 // ── STATE ─────────────────────────────────────
 const STORE = {
-  token: localStorage.getItem('mo_token') || null,
-  refresh: localStorage.getItem('mo_refresh') || null,
+  token: sessionStorage.getItem('mo_token') || localStorage.getItem('mo_token') || null,
+  refresh: sessionStorage.getItem('mo_refresh') || localStorage.getItem('mo_refresh') || null,
   user: JSON.parse(localStorage.getItem('mo_user') || 'null'),
   storeId: localStorage.getItem('mo_store') || '01H0000000000000000000001',
   merchantId: localStorage.getItem('mo_merchant') || '01H0000000000000000000000',
@@ -28,6 +29,10 @@ const STORE = {
   cart: [],
   cartCustomer: null,
 };
+
+// Migrate old persistent credentials once, then keep credentials only for this browser session.
+if (STORE.token) { sessionStorage.setItem('mo_token', STORE.token); localStorage.removeItem('mo_token'); }
+if (STORE.refresh) { sessionStorage.setItem('mo_refresh', STORE.refresh); localStorage.removeItem('mo_refresh'); }
 
 // Apply theme
 document.documentElement.setAttribute('data-theme', STORE.theme);
@@ -70,8 +75,8 @@ async function login(email, password) {
   STORE.token = j.accessToken; STORE.refresh = j.refreshToken;
   STORE.user = j.user; STORE.merchantId = j.merchantId; STORE.storeId = j.storeId;
   STORE.storeName = j.user?.name || 'My Store';
-  localStorage.setItem('mo_token', STORE.token);
-  localStorage.setItem('mo_refresh', STORE.refresh);
+  sessionStorage.setItem('mo_token', STORE.token);
+  sessionStorage.setItem('mo_refresh', STORE.refresh);
   localStorage.setItem('mo_user', JSON.stringify(STORE.user));
   localStorage.setItem('mo_store', STORE.storeId);
   localStorage.setItem('mo_merchant', STORE.merchantId);
@@ -81,6 +86,8 @@ async function login(email, password) {
 function logout() {
   fetch('/auth/logout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ refreshToken: STORE.refresh })}).catch(()=>{});
   Object.keys(localStorage).forEach(k => { if (k.startsWith('mo_')) localStorage.removeItem(k); });
+  sessionStorage.removeItem('mo_token');
+  sessionStorage.removeItem('mo_refresh');
   location.reload();
 }
 
@@ -160,7 +167,7 @@ async function render() {
       case 'settings': return await renderSettings(p);
     }
   } catch (err) {
-    p.innerHTML = `<div class="empty"><div class="empty-ico">⚠️</div><h4>Error</h4><p>${err.message}</p></div>`;
+    p.innerHTML = `<div class="empty"><div class="empty-ico">⚠️</div><h4>Error</h4><p>${esc(err.message)}</p></div>`;
   }
 }
 
@@ -174,9 +181,6 @@ async function renderHome(p) {
     api('GET', `/api/bills?storeId=${STORE.storeId}`).catch(() => []),
   ]);
   const todaysSales = Number(today.totalMinor || 0);
-  // PhonePe/Paytm effective rate: ~1.5% (UPI is 0% but they charge via settlement, wallet, business acct)
-  const competitorFee = 0.015;
-  const saved = Math.round(todaysSales * competitorFee);
 
   // Get most recent 5 transactions across bills + payments
   const recent = bills.slice(0, 5).map(b => ({
@@ -188,9 +192,9 @@ async function renderHome(p) {
 
   p.innerHTML = `
     <div class="hero">
-      <div class="hero-label">Today's collection</div>
+      <div class="hero-label">Verified payments today</div>
       <div class="hero-amount">${fmtINRshort(todaysSales)}</div>
-      <div class="hero-sub">${today.count || 0} bills · avg ${fmtINRshort(today.averageMinor || 0)}</div>
+      <div class="hero-sub">${today.count || 0} payments · avg ${fmtINRshort(today.averageMinor || 0)}</div>
       <div class="hero-stats">
         <div class="hero-stat"><div class="hero-stat-label">Khata due</div><div class="hero-stat-value">${fmtINRshort(khata.outstandingMinor)}</div></div>
         <div class="hero-stat"><div class="hero-stat-label">Customers</div><div class="hero-stat-value">${customers.length}</div></div>
@@ -199,14 +203,13 @@ async function renderHome(p) {
     </div>
 
     <div class="savings">
-      <div class="savings-icon">💰</div>
+      <div class="savings-icon">ℹ️</div>
       <div class="savings-text">
-        <div class="lbl">You saved today vs PhonePe</div>
-        <div class="val">${fmtINR(saved)}</div>
-        <div class="sub">PhonePe/Paytm charge ~1.5% effective. You charged 0%.</div>
+        <div class="lbl">Payment integration status</div>
+        <div class="val">Sandbox only</div>
+        <div class="sub">No real UPI, card, or bank payment provider is configured in this build.</div>
       </div>
     </div>
-
     <div class="actions">
       <button class="action primary" onclick="go('accept')"><div class="action-ico">💳</div><div class="action-label">Accept</div></button>
       <button class="action" onclick="go('khata')"><div class="action-ico">👥</div><div class="action-label">Khata</div></button>
@@ -223,7 +226,7 @@ async function renderHome(p) {
           <div class="tx-sub">${fmtTime(r.sub)}</div>
         </div>
         <div class="tx-amount">${fmtINR(r.amount)}</div>
-        <div class="tx-state ${r.state?.toLowerCase()}">${r.state}</div>
+        <div class="tx-state ${r.state?.toLowerCase()}">${esc(r.state)}</div>
       </div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">🧾</div><h4>No bills yet today</h4><p>Create your first bill</p><button onclick="openBillCreator()">+ New bill</button></div>`}
   `;
 }
@@ -299,29 +302,26 @@ async function generatePayment() {
 
 function showPaymentResult(sess) {
   const link = location.origin + '/pay/' + sess.paymentToken;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}`;
+  const qrUrl = `/api/payments/qr/${encodeURIComponent(sess.paymentToken)}`;
   const rupees = (Number(sess.amount.minor) / 100).toFixed(2);
   openSheet('Payment link', `
     <div class="result-card">
       <div class="result-amount">₹${rupees}</div>
       <div class="result-state" id="payState" style="background:rgba(245,158,11,.12);color:var(--warn)">⏳ Awaiting payment</div>
       <div class="qr-box"><img src="${qrUrl}" alt="QR"></div>
-      <div class="share-link">${link}</div>
-      <div class="status-wait"><div class="spinner"></div> Waiting for customer to scan &amp; pay…</div>
+      <div class="share-link">${esc(link)}</div>
+      <div class="status-wait"><div class="spinner"></div> SANDBOX ONLY — no real payment provider is connected; this link cannot collect money.</div>
       <div class="action-row">
-        <button onclick="navigator.clipboard.writeText('${link}');toast('Link copied','ok')">📋 Copy link</button>
-        <button class="primary" onclick="window.open('${link}','_blank')">Open pay page ↗</button>
+        <button onclick="navigator.clipboard.writeText('${esc(link)}');toast('Link copied','ok')">📋 Copy link</button>
+        <button class="primary" onclick="window.open('${esc(link)}','_blank')">Open pay page ↗</button>
       </div>
-      <div class="action-row">
-        <button onclick="simulatePay('${sess.paymentToken}')" id="simBtn">✓ Mark as paid (demo)</button>
-      </div>
-    </div>
+   </div>
   `);
   // Poll for status every 3s
   if (STORE.pollHandle) clearInterval(STORE.pollHandle);
   STORE.pollHandle = setInterval(async () => {
     try {
-      const p = await api('GET', '/pay/' + sess.paymentToken + '/data');
+      const p = await api('GET', '/pay/' + sess.paymentToken);
       if (p.state === 'VERIFIED' || p.state === 'SUCCESS') {
         clearInterval(STORE.pollHandle); STORE.pollHandle = null;
         const payState = $('#payState');
@@ -341,12 +341,6 @@ function showPaymentResult(sess) {
       }
     } catch {}
   }, 3000);
-}
-
-function simulatePay(token) {
-  fetch('/api/dev/simulate-success?token=' + token, { method: 'POST' }).then(() => {
-    toast('Simulated payment', 'ok');
-  });
 }
 
 function beepSuccess() {
@@ -395,11 +389,11 @@ function customerCard(c) {
   const bal = Number(c.balanceMinor);
   const cls = bal > 0 ? 'pos' : bal < 0 ? 'neg' : 'zero';
   const label = bal > 0 ? 'owes' : bal < 0 ? 'advance' : 'clear';
-  return `<div class="cust-card" data-name="${c.name}" data-phone="${c.phone||''}" onclick="openCustomer('${c.id}')">
+  return `<div class="cust-card" data-name="${esc(c.name)}" data-phone="${esc(c.phone||'')}" onclick="openCustomer('${c.id}')">
     <div class="cust-avatar">${c.name[0].toUpperCase()}</div>
     <div class="cust-body">
-      <div class="cust-name">${c.name}</div>
-      <div class="cust-phone">${c.phone || '—'}</div>
+      <div class="cust-name">${esc(c.name)}</div>
+      <div class="cust-phone">${esc(c.phone || '—')}</div>
     </div>
     <div style="text-align:right">
       <div class="cust-balance ${cls}">${fmtINR(Math.abs(bal))}</div>
@@ -526,7 +520,7 @@ async function renderBills(p) {
           <div class="tx-sub">${fmtTime(b.createdAt || b.created_at)} · ${(b.id||'').slice(-8)}</div>
         </div>
         <div class="tx-amount">${fmtINR(b.totalMinor || b.total_minor)}</div>
-        <div class="tx-state ${b.state?.toLowerCase()}">${b.state}</div>
+        <div class="tx-state ${b.state?.toLowerCase()}">${esc(b.state)}</div>
       </div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">🧾</div><h4>No bills yet</h4><p>Create your first bill</p><button onclick="openBillCreator()">+ New bill</button></div>`}
   `;
 }
@@ -540,10 +534,10 @@ async function openBillCreator() {
   STORE.cart = []; STORE.cartCustomer = null;
   openSheet('New bill', `
     <div class="field"><label>Customer</label>
-      <select id="bcCust"><option value="">Walk-in</option>${customers.map(c => `<option value="${c.id}">${c.name}${Number(c.balanceMinor)>0?' (owes '+fmtINR(c.balanceMinor)+')':''}</option>`).join('')}</select>
+      <select id="bcCust"><option value="">Walk-in</option>${customers.map(c => `<option value="${c.id}">${esc(c.name)}${Number(c.balanceMinor)>0?' (owes '+fmtINR(c.balanceMinor)+')':''}</option>`).join('')}</select>
     </div>
     <div class="field"><label>Add product</label>
-      <select id="bcProd"><option value="">Choose a product…</option>${products.map(p => `<option value="${p.id}" data-price="${p.price.minor}" data-name="${p.name}" data-stock="${p.stockCount}">${p.name} — ${fmtINR(p.price.minor)} (${p.stockCount} in stock)</option>`).join('')}</select>
+      <select id="bcProd"><option value="">Choose a product…</option>${products.map(p => `<option value="${p.id}" data-price="${p.price.minor}" data-name="${esc(p.name)}" data-stock="${p.stockCount}" data-tax-bps="${p.taxBps || 0}">${esc(p.name)} — ${fmtINR(p.price.minor)} (${p.stockCount} in stock)</option>`).join('')}</select>
     </div>
     <div id="bcCart"></div>
     <div class="totals" id="bcTotals" style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px">
@@ -560,7 +554,7 @@ async function openBillCreator() {
     $('#bcCart').innerHTML = items.length ? items.map((it, i) => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px">
         <div>
-          <div style="font-weight:600">${it.name}</div>
+          <div style="font-weight:600">${esc(it.name)}</div>
           <div style="color:var(--text-mute);font-size:11px">${fmtINR(it.unitPriceMinor)} × ${it.quantity}</div>
         </div>
         <div style="display:flex;gap:4px;align-items:center">
@@ -579,6 +573,7 @@ async function openBillCreator() {
     $('#bcTax').textContent = fmtINR(tax.toString());
     $('#bcTotal').textContent = fmtINR((sub + tax).toString());
   };
+  window.renderBillCart = renderCart;
   renderCart();
 
   $('#bcProd').addEventListener('change', (e) => {
@@ -589,8 +584,8 @@ async function openBillCreator() {
     const price = opt.dataset.price;
     const stock = Number(opt.dataset.stock);
     const existing = STORE.cart.find(c => c.productId === id);
-    if (existing) { existing.quantity++; }
-    else { STORE.cart.push({ productId: id, name, quantity: 1, unitPriceMinor: price, taxBps: 0, stock }); }
+    if (existing) { if (existing.quantity >= existing.stock) { toast('Not enough stock', 'bad'); return; } existing.quantity++; }
+    else { STORE.cart.push({ productId: id, name, quantity: 1, unitPriceMinor: price, taxBps: Number(opt.dataset.taxBps) || 0, stock }); }
     e.target.value = '';
     renderCart();
   });
@@ -598,15 +593,17 @@ async function openBillCreator() {
 
 window.billQty = (i, d) => {
   const it = STORE.cart[i];
-  const nq = it.quantity + d;
-  if (nq <= 0) STORE.cart.splice(i, 1);
-  else if (nq > it.stock) { toast('Not enough stock', 'bad'); return; }
-  else it.quantity = nq;
-  // Re-render
-  openBillCreator();
-  // Re-add to cart (openBillCreator clears STORE.cart)
-  // Simpler: just re-render
-  // Actually openBillCreator already cleared cart. So this won't work. Need a different approach.
+  if (!it) return;
+  const next = it.quantity + d;
+  if (next <= 0) STORE.cart.splice(i, 1);
+  else if (next > it.stock) { toast('Not enough stock', 'bad'); return; }
+  else it.quantity = next;
+  window.renderBillCart?.();
+};
+window.billRm = (i) => {
+  if (i < 0 || i >= STORE.cart.length) return;
+  STORE.cart.splice(i, 1);
+  window.renderBillCart?.();
 };
 
 async function checkoutBill() {
@@ -633,8 +630,8 @@ async function renderProducts(p) {
       <div class="tx">
         <div class="tx-ico">📦</div>
         <div class="tx-body">
-          <div class="tx-title">${pr.name}</div>
-          <div class="tx-sub">${pr.sku || '—'} · ${pr.category || '—'}</div>
+          <div class="tx-title">${esc(pr.name)}</div>
+          <div class="tx-sub">${esc(pr.sku || '—')} · ${esc(pr.category || '—')}</div>
         </div>
         <div style="text-align:right">
           <div class="tx-amount">${fmtINR(pr.price.minor)}</div>
@@ -679,8 +676,8 @@ async function renderSuppliers(p) {
       <div class="tx">
         <div class="tx-ico">🚚</div>
         <div class="tx-body">
-          <div class="tx-title">${s.name}</div>
-          <div class="tx-sub">${s.phone || '—'}</div>
+          <div class="tx-title">${esc(s.name)}</div>
+          <div class="tx-sub">${esc(s.phone || '—')}</div>
         </div>
       </div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">🚚</div><h4>No suppliers</h4></div>`}
   `;
@@ -713,8 +710,8 @@ async function renderExpenses(p) {
       <div class="tx">
         <div class="tx-ico">💸</div>
         <div class="tx-body">
-          <div class="tx-title">${e.description || e.category}</div>
-          <div class="tx-sub">${fmtDate(e.occurredAt || e.occurred_at)} · ${e.category}</div>
+          <div class="tx-title">${esc(e.description || e.category)}</div>
+          <div class="tx-sub">${fmtDate(e.occurredAt || e.occurred_at)} · ${esc(e.category)}</div>
         </div>
         <div class="tx-amount">${fmtINR(e.amountMinor || e.amount_minor)}</div>
       </div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">💸</div><h4>No expenses tracked</h4><button onclick="addExpense()">+ Add expense</button></div>`}
@@ -726,8 +723,8 @@ window.addExpense = () => {
     <div class="field"><label>Amount (₹) *</label><input id="aeAmount" type="number" step="0.01"></div>
     <div class="field"><label>Category</label>
       <select id="aeCat">
-        <option>RENT</option><option>ELECTRICITY</option><option>SALARY</option>
-        <option>STOCK</option><option>TRANSPORT</option><option>OTHER</option>
+        <option>RENT</option><option>UTILITIES</option><option>SALARY</option>
+        <option>INVENTORY</option><option>MAINTENANCE</option><option>MARKETING</option><option>TRAVEL</option><option>MISC</option>
       </select>
     </div>
     <div class="field"><label>Description</label><input id="aeDesc"></div>
@@ -759,7 +756,7 @@ async function renderReports(p) {
       <div class="khata-hero" style="margin:0">
         <div class="label">Today</div>
         <div class="amount" style="color:var(--primary)">${fmtINR(today.totalMinor)}</div>
-        <div class="sub">${today.count || 0} bills</div>
+        <div class="sub">${today.count || 0} verified payments</div>
       </div>
       <div class="khata-hero" style="margin:0">
         <div class="label">Outstanding khata</div>
@@ -772,7 +769,7 @@ async function renderReports(p) {
       <div class="tx">
         <div class="tx-ico">📦</div>
         <div class="tx-body">
-          <div class="tx-title">${pr.name}</div>
+          <div class="tx-title">${esc(pr.name)}</div>
           <div class="tx-sub">${pr.quantity} sold</div>
         </div>
         <div class="tx-amount">${fmtINR(pr.revenueMinor)}</div>
@@ -787,7 +784,7 @@ async function renderShifts(p) {
     <div class="sec-head"><div class="sec-title">Current shift</div></div>
     ${r.shift ? `<div class="result-card">
       <div style="font-size:14px"><strong>Shift open</strong> since ${fmtTime(r.shift.openedAt)}</div>
-      <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Opening cash: ${fmtINR(r.shift.openingCashMinor || 0)}</div>
+      <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Opening cash: ${fmtINR(r.shift.openingCash?.minor || 0)}</div>
       <div class="action-row" style="margin-top:14px">
         <button onclick="addShiftEntry('${r.shift.id}')">+ Cash entry</button>
         <button class="primary" onclick="closeShift('${r.shift.id}')">Close shift</button>
@@ -798,7 +795,7 @@ async function renderShifts(p) {
 
 window.openShift = async () => {
   try {
-    await api('POST', '/api/shifts/open', { storeId: STORE.storeId, openingCashMinor: '0' });
+    await api('POST', '/api/shifts/open', { storeId: STORE.storeId, openingCash: { currency: 'INR', minor: '0' } });
     toast('Shift opened', 'ok'); render();
   } catch (e) { toast(e.message, 'bad'); }
 };
@@ -806,7 +803,7 @@ window.closeShift = async (id) => {
   openSheet('Close shift', `<div class="field"><label>Closing cash (₹)</label><input id="csAmount" type="number" step="0.01" value="0"></div>`,
     async () => {
       try {
-        await api('POST', `/api/shifts/${id}/close`, { closingCashMinor: String(Math.round(Number($('#csAmount').value) * 100)) });
+        await api('POST', `/api/shifts/${id}/close`, { closingCash: { currency: 'INR', minor: String(Math.round(Number($('#csAmount').value) * 100)) } });
         toast('Shift closed', 'ok'); closeSheet(); render();
       } catch (e) { toast(e.message, 'bad'); }
     });
@@ -824,8 +821,8 @@ window.addShiftEntry = (shiftId) => {
     if (!amt) { toast('Amount required', 'bad'); return; }
     try {
       await api('POST', `/api/shifts/${shiftId}/entries`, {
-        kind: $('#seKind').value,
-        amountMinor: String(Math.round(amt * 100)),
+        type: $('#seKind').value,
+        amount: { currency: 'INR', minor: String(Math.round(amt * 100)) },
         description: $('#seNote').value || undefined,
       });
       toast('Entry added', 'ok'); closeSheet(); render();
@@ -846,12 +843,12 @@ function renderSettings(p) {
       </div>
       <div class="menu-item" onclick="go('home')">
         <div class="menu-ico">🏠</div>
-        <div class="menu-body"><div class="menu-title">Store</div><div class="menu-sub">${STORE.storeName}</div></div>
+        <div class="menu-body"><div class="menu-title">Store</div><div class="menu-sub">${esc(STORE.storeName)}</div></div>
         <div class="menu-arrow">›</div>
       </div>
       <div class="menu-item" onclick="alert('Logged in as: ' + (STORE.user?.email || '') + '\\nRole: ' + (STORE.user?.role || '') + '\\nPermissions: ' + (STORE.user?.permissions?.length || 0))">
         <div class="menu-ico">👤</div>
-        <div class="menu-body"><div class="menu-title">Account</div><div class="menu-sub">${STORE.user?.email || ''} · ${STORE.user?.role || ''}</div></div>
+        <div class="menu-body"><div class="menu-title">Account</div><div class="menu-sub">${esc(STORE.user?.email || '')} · ${esc(STORE.user?.role || '')}</div></div>
         <div class="menu-arrow">›</div>
       </div>
       <div class="menu-item" onclick="installPWA()">
@@ -902,5 +899,5 @@ $('#loginForm').addEventListener('submit', async (e) => {
 
 // ── BOOT ──────────────────────────────────────
 if (STORE.token) {
-  api('GET', '/auth/me').then(() => showApp()).catch(() => { localStorage.clear(); STORE.token = null; });
+  api('GET', '/auth/me').then(() => showApp()).catch(() => { sessionStorage.removeItem('mo_token'); sessionStorage.removeItem('mo_refresh'); localStorage.removeItem('mo_token'); localStorage.removeItem('mo_refresh'); STORE.token = null; STORE.refresh = null; });
 }

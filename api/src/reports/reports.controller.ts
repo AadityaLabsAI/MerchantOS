@@ -21,9 +21,12 @@ export class ReportsController {
     await assertStoreAccess(req.auth, storeId);
     const r = await query(
       `SELECT COALESCE(SUM((p.amount_minor)::bigint), 0) AS total, COUNT(*) AS cnt
-         FROM payments p JOIN payment_sessions s ON s.id = p.payment_session_id
-        WHERE p.merchant_id = $1 AND s.store_id = $2
-          AND s.state = 'VERIFIED' AND DATE(p.paid_at AT TIME ZONE 'UTC') = DATE(now() AT TIME ZONE 'UTC')`,
+         FROM payments p
+         JOIN payment_sessions s ON s.id = p.payment_session_id
+         JOIN stores st ON st.id = s.store_id AND st.merchant_id = s.merchant_id
+        WHERE p.merchant_id = $1 AND s.store_id = $2 AND s.state = 'VERIFIED'
+          AND p.currency = 'INR'
+          AND DATE(p.paid_at AT TIME ZONE st.timezone) = DATE(now() AT TIME ZONE st.timezone)`,
       [req.auth.merchantId, storeId]);
     const row = r.rows[0];
     const total = BigInt(row.total);

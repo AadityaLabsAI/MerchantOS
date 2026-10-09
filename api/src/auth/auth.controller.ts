@@ -15,6 +15,14 @@ import { Audit } from '../audit/audit.service.js';
 
 const RefreshInput = z.object({ refreshToken: z.string().min(1) });
 
+function ttlToMs(ttl: string): number {
+  const match = /^(\d+)(ms|s|m|h|d)$/.exec(ttl);
+  if (!match) throw new Error('invalid configured TTL');
+  const n = Number(match[1]);
+  const multiplier = match[2] === 'ms' ? 1 : match[2] === 's' ? 1000 : match[2] === 'm' ? 60_000 : match[2] === 'h' ? 3_600_000 : 86_400_000;
+  return n * multiplier;
+}
+
 @Controller('auth')
 @UseGuards(AuthGuard, PermissionsGuard)
 export class AuthController {
@@ -64,10 +72,10 @@ export class AuthController {
       sub: u.id, merchantId: u.merchant_id, storeId: effectiveStore, role, permissions,
     });
     const jti = ulid();
-    const refreshToken = await signRefresh(cfg.JWT_REFRESH_SECRET, cfg.JWT_REFRESH_TTL, { sub: u.id, jti });
+    const refreshToken = await signRefresh(cfg.JWT_REFRESH_SECRET, cfg.JWT_REFRESH_TTL, { sub: u.id, jti, storeId: effectiveStore });
     await query(
-      `INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES ($1, $2, now() + interval '30 days')`,
-      [jti, u.id]);
+      `INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES ($1, $2, now() + ($3::bigint * interval '1 millisecond'))`,
+      [jti, u.id, ttlToMs(cfg.JWT_REFRESH_TTL)]);
     await query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [u.id]);
     await this.audit.write({
       merchantId: u.merchant_id, storeId: effectiveStore, actorUserId: u.id,
@@ -87,24 +95,46 @@ export class AuthController {
     const parsed = RefreshInput.parse(body);
     const cfg = loadConfig();
     const claims = await verifyRefresh(cfg.JWT_REFRESH_SECRET, parsed.refreshToken);
-    const stored = await query<{ revoked_at: Date | null; expires_at: Date }>(
-      `SELECT revoked_at, expires_at FROM refresh_tokens WHERE jti = $1`, [claims.jti]);
-    if (!stored.rows[0] || stored.rows[0].revoked_at || new Date(stored.rows[0].expires_at) < new Date()) {
-      throw new HttpException({ code: 'REFRESH_REVOKED', message: 'refresh token revoked or expired' }, 401);
-    }
-    const r = await query<{ id: string; merchant_id: string; role: string; is_active: boolean }>(
-      `SELECT u.id, u.merchant_id, u.is_active, m.role FROM users u
-        LEFT JOIN LATERAL (SELECT role FROM store_memberships WHERE user_id = u.id AND merchant_id = u.merchant_id ORDER BY created_at ASC LIMIT 1) m ON true
-       WHERE u.id = $1`, [claims.sub]);
-    if (!r.rows[0] || !r.rows[0].is_active) throw new HttpException({ code: 'USER_INACTIVE', message: 'user inactive' }, 401);
-    const stores = await query<{ store_id: string }>(`SELECT store_id FROM store_memberships WHERE user_id = $1`, [claims.sub]);
-    const role = (r.rows[0].role ?? 'CASHIER') as Role;
-    const permissions = ROLE_PERMISSIONS[role] ?? [];
-    const accessToken = await signAccess(cfg.JWT_ACCESS_SECRET, cfg.JWT_ACCESS_TTL, {
-      sub: claims.sub, merchantId: r.rows[0].merchant_id, storeId: stores.rows[0]?.store_id ?? null,
-      role, permissions,
+
+    // Lock and rotate the token in one transaction. A concurrent replay sees the
+    // old row revoked and cannot mint another access/refresh-token pair.
+    return withTx(async (c) => {
+      const stored = await c.query<{ revoked_at: Date | null; expires_at: Date }>(
+        `SELECT revoked_at, expires_at FROM refresh_tokens WHERE jti = $1 FOR UPDATE`, [claims.jti]);
+      if (!stored.rows[0] || stored.rows[0].revoked_at || new Date(stored.rows[0].expires_at).getTime() <= Date.now()) {
+        throw new HttpException({ code: 'REFRESH_REVOKED', message: 'refresh token revoked or expired' }, 401);
+      }
+
+      const userRes = await c.query<{ id: string; merchant_id: string; is_active: boolean }>(
+        `SELECT id, merchant_id, is_active FROM users WHERE id = $1`, [claims.sub]);
+      const user = userRes.rows[0];
+      if (!user || !user.is_active) throw new HttpException({ code: 'USER_INACTIVE', message: 'user inactive' }, 401);
+
+      const stores = await c.query<{ store_id: string; role: string; is_default: boolean }>(
+        `SELECT store_id, role, is_default FROM store_memberships
+          WHERE user_id = $1 AND merchant_id = $2
+          ORDER BY (store_id = $3) DESC, is_default DESC, created_at ASC`,
+        [user.id, user.merchant_id, claims.storeId ?? '']);
+      if (!stores.rows[0]) throw new HttpException({ code: 'NO_STORE', message: 'user has no active store membership' }, 403);
+      const selected = stores.rows[0];
+      const role = selected.role as Role;
+      const permissions = ROLE_PERMISSIONS[role] ?? [];
+      const accessToken = await signAccess(cfg.JWT_ACCESS_SECRET, cfg.JWT_ACCESS_TTL, {
+        sub: user.id, merchantId: user.merchant_id, storeId: selected.store_id, role, permissions,
+      });
+
+      const newJti = ulid();
+      const refreshToken = await signRefresh(cfg.JWT_REFRESH_SECRET, cfg.JWT_REFRESH_TTL, {
+        sub: user.id, jti: newJti, storeId: selected.store_id,
+      });
+      await c.query(`UPDATE refresh_tokens SET revoked_at = now() WHERE jti = $1`, [claims.jti]);
+      await c.query(
+        `INSERT INTO refresh_tokens (jti, user_id, expires_at)
+         VALUES ($1, $2, now() + ($3::bigint * interval '1 millisecond'))`,
+        [newJti, user.id, ttlToMs(cfg.JWT_REFRESH_TTL)],
+      );
+      return { accessToken, refreshToken, expiresIn: cfg.JWT_ACCESS_TTL };
     });
-    return { accessToken, expiresIn: cfg.JWT_ACCESS_TTL };
   }
 
   @Public()

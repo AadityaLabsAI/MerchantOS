@@ -15,6 +15,7 @@ export interface AccessTokenPayload {
 export interface RefreshTokenPayload {
   sub: string;
   jti: string;
+  storeId?: string;
   typ: 'refresh';
 }
 

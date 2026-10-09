@@ -3,7 +3,8 @@ import { CanActivate, ExecutionContext, Injectable, SetMetadata, UnauthorizedExc
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { loadConfig } from '../config/config.js';
-import type { AuthContext } from '@merchantos/shared-types';
+import { ROLE_PERMISSIONS, type AuthContext, type Role } from '@merchantos/shared-types';
+import { query } from '../db/db.js';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
@@ -25,14 +26,33 @@ export class AuthGuard implements CanActivate {
     const token = header.slice('Bearer '.length);
     try {
       const cfg = loadConfig();
-      const payload = await this.jwt.verifyAsync(token, { secret: cfg.JWT_ACCESS_SECRET });
+      const payload = await this.jwt.verifyAsync(token, { secret: cfg.JWT_ACCESS_SECRET, algorithms: ['HS256'] });
       if ((payload as any).typ !== 'access') throw new UnauthorizedException('not an access token');
+      const userId = typeof (payload as any).sub === 'string' ? (payload as any).sub : '';
+      const merchantId = typeof (payload as any).merchantId === 'string' ? (payload as any).merchantId : '';
+      const storeId = typeof (payload as any).storeId === 'string' ? (payload as any).storeId : '';
+      if (!userId || !merchantId || !storeId) throw new UnauthorizedException('token missing required tenant context');
+
+      // Resolve authorization from current database state, not stale JWT role/permissions.
+      const live = await query<{ id: string; merchant_id: string; role: string }>(
+        `SELECT u.id, u.merchant_id, sm.role
+           FROM users u
+           JOIN store_memberships sm
+             ON sm.user_id = u.id AND sm.merchant_id = u.merchant_id AND sm.store_id = $3
+          WHERE u.id = $1 AND u.merchant_id = $2 AND u.is_active = true
+          LIMIT 1`,
+        [userId, merchantId, storeId],
+      );
+      if (!live.rows[0]) throw new UnauthorizedException('account inactive or store access revoked');
+      const role = live.rows[0].role as Role;
+      const permissions = ROLE_PERMISSIONS[role];
+      if (!permissions) throw new UnauthorizedException('invalid current role');
       const a: AuthContext = {
-        userId: payload.sub,
-        merchantId: payload.merchantId,
-        storeId: payload.storeId ?? null,
-        role: payload.role,
-        permissions: payload.permissions ?? [],
+        userId: live.rows[0].id,
+        merchantId: live.rows[0].merchant_id,
+        storeId,
+        role,
+        permissions,
       };
       req.auth = a;
       req.tenant = a;  // back-compat

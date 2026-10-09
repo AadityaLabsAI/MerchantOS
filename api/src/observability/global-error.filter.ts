@@ -41,8 +41,11 @@ export class GlobalErrorFilter implements ExceptionFilter {
       if (pgCode === '23505') { status = 409; code = 'DUPLICATE'; message = 'Resource already exists'; }
       else if (pgCode === '23503') { status = 409; code = 'FK_VIOLATION'; message = 'Referenced resource does not exist'; }
       else if (pgCode === '23502') { status = 400; code = 'NULL_VIOLATION'; message = 'Required field missing'; }
-      else { this.logger.error(`${req.method} ${req.url} -> ${msg}
-${exception.stack}`); message = msg; }
+      else {
+        this.logger.error(`${req.method} ${req.url} -> ${msg}
+${exception.stack}`);
+        message = process.env.NODE_ENV === 'production' ? 'Internal server error' : msg;
+      }
     }
 
     const body = { error: { code, message, fields, requestId: req.id ?? null } };

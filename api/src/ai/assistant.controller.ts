@@ -54,8 +54,12 @@ function escapeForContext(s: string): string {
 async function fetchContext(merchantId: string, storeId: string): Promise<string> {
   const today = await query(
     `SELECT COALESCE(SUM((p.amount_minor)::bigint), 0) AS total, COUNT(*) AS cnt
-       FROM payments p JOIN payment_sessions s ON s.id = p.payment_session_id
-      WHERE p.merchant_id = $1 AND s.store_id = $2 AND s.state = 'VERIFIED' AND DATE(p.paid_at AT TIME ZONE 'UTC') = DATE(now() AT TIME ZONE 'UTC')`,
+       FROM payments p
+       JOIN payment_sessions s ON s.id = p.payment_session_id
+       JOIN stores st ON st.id = s.store_id AND st.merchant_id = s.merchant_id
+      WHERE p.merchant_id = $1 AND s.store_id = $2 AND s.state = 'VERIFIED'
+        AND p.currency = 'INR'
+        AND DATE(p.paid_at AT TIME ZONE st.timezone) = DATE(now() AT TIME ZONE st.timezone)`,
     [merchantId, storeId]);
   const top = await query(
     `SELECT bi.name, SUM((bi.line_total_minor)::bigint) AS revenue
@@ -67,7 +71,7 @@ async function fetchContext(merchantId: string, storeId: string): Promise<string
     `SELECT name, stock_count, low_stock_threshold FROM products WHERE merchant_id = $1 AND store_id = $2 AND stock_count <= low_stock_threshold ORDER BY stock_count LIMIT 5`,
     [merchantId, storeId]);
   const totalRupees = Number(today.rows[0].total) / 100;
-  return `Today sales: ₹${totalRupees.toFixed(2)} (${today.rows[0].cnt} bills).
+  return `Today verified payments: ₹${totalRupees.toFixed(2)} (${today.rows[0].cnt} payments).
 Top 7-day products: ${top.rows.map(r => `${escapeForContext(r.name)} (₹${Number(r.revenue)/100})`).join(', ') || 'none'}.
 Low stock: ${lowStock.rows.map(r => `${escapeForContext(r.name)} (${r.stock_count} left)`).join(', ') || 'all good'}.`;
 }

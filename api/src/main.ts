@@ -15,7 +15,7 @@ async function bootstrap() {
   // Increase if your catalog or bills need more.
   const adapter = new FastifyAdapter({
     logger: false,
-    trustProxy: true,
+    trustProxy: cfg.TRUSTED_PROXIES.split(',').map((s) => s.trim()).filter(Boolean),
     bodyLimit: 2 * 1024 * 1024, // 2 MB
     // Request timeouts prevent slow-loris attacks and runaway handlers.
     requestTimeout: 30_000,
@@ -48,6 +48,9 @@ async function bootstrap() {
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header('X-DNS-Prefetch-Control', 'off');
     reply.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+    if (cfg.NODE_ENV === 'production') {
+      reply.header('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'; upgrade-insecure-requests");
+    }
     if (cfg.NODE_ENV === 'production') {
       reply.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
     }
