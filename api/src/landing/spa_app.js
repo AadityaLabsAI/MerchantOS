@@ -15,8 +15,8 @@ const fmtTime = (s) => { try { return new Date(s).toLocaleTimeString('en-IN', { 
 
 // ── STATE ─────────────────────────────────────
 const STORE = {
-  token: localStorage.getItem('mo_token') || null,
-  refresh: localStorage.getItem('mo_refresh') || null,
+  token: sessionStorage.getItem('mo_token') || localStorage.getItem('mo_token') || null,
+  refresh: sessionStorage.getItem('mo_refresh') || localStorage.getItem('mo_refresh') || null,
   user: JSON.parse(localStorage.getItem('mo_user') || 'null'),
   storeId: localStorage.getItem('mo_store') || '01H0000000000000000000001',
   merchantId: localStorage.getItem('mo_merchant') || '01H0000000000000000000000',
@@ -29,6 +29,10 @@ const STORE = {
   cart: [],
   cartCustomer: null,
 };
+
+// Migrate old persistent credentials once, then keep credentials only for this browser session.
+if (STORE.token) { sessionStorage.setItem('mo_token', STORE.token); localStorage.removeItem('mo_token'); }
+if (STORE.refresh) { sessionStorage.setItem('mo_refresh', STORE.refresh); localStorage.removeItem('mo_refresh'); }
 
 // Apply theme
 document.documentElement.setAttribute('data-theme', STORE.theme);
@@ -71,8 +75,8 @@ async function login(email, password) {
   STORE.token = j.accessToken; STORE.refresh = j.refreshToken;
   STORE.user = j.user; STORE.merchantId = j.merchantId; STORE.storeId = j.storeId;
   STORE.storeName = j.user?.name || 'My Store';
-  localStorage.setItem('mo_token', STORE.token);
-  localStorage.setItem('mo_refresh', STORE.refresh);
+  sessionStorage.setItem('mo_token', STORE.token);
+  sessionStorage.setItem('mo_refresh', STORE.refresh);
   localStorage.setItem('mo_user', JSON.stringify(STORE.user));
   localStorage.setItem('mo_store', STORE.storeId);
   localStorage.setItem('mo_merchant', STORE.merchantId);
@@ -82,6 +86,8 @@ async function login(email, password) {
 function logout() {
   fetch('/auth/logout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ refreshToken: STORE.refresh })}).catch(()=>{});
   Object.keys(localStorage).forEach(k => { if (k.startsWith('mo_')) localStorage.removeItem(k); });
+  sessionStorage.removeItem('mo_token');
+  sessionStorage.removeItem('mo_refresh');
   location.reload();
 }
 
@@ -893,5 +899,5 @@ $('#loginForm').addEventListener('submit', async (e) => {
 
 // ── BOOT ──────────────────────────────────────
 if (STORE.token) {
-  api('GET', '/auth/me').then(() => showApp()).catch(() => { localStorage.clear(); STORE.token = null; });
+  api('GET', '/auth/me').then(() => showApp()).catch(() => { sessionStorage.removeItem('mo_token'); sessionStorage.removeItem('mo_refresh'); localStorage.removeItem('mo_token'); localStorage.removeItem('mo_refresh'); STORE.token = null; STORE.refresh = null; });
 }
