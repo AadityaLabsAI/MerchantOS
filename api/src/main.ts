@@ -15,7 +15,7 @@ async function bootstrap() {
   // Increase if your catalog or bills need more.
   const adapter = new FastifyAdapter({
     logger: false,
-    trustProxy: true,
+    trustProxy: cfg.TRUSTED_PROXIES.split(',').map((s) => s.trim()).filter(Boolean),
     bodyLimit: 2 * 1024 * 1024, // 2 MB
     // Request timeouts prevent slow-loris attacks and runaway handlers.
     requestTimeout: 30_000,
