@@ -4,11 +4,16 @@ set -eu
 cd /app
 
 # Fail closed on placeholders: the compose file must receive real, generated secrets.
-case "${POSTGRES_PASSWORD:-}" in
-  ""|postgres|change-me*|changeme*) echo "[entrypoint] POSTGRES_PASSWORD must be generated, not a placeholder" >&2; exit 1 ;;
+dbPassword="$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(decodeURIComponent(u.password))')"
+case "$dbPassword" in
+  ""|postgres|change-me*|changeme*) echo "[entrypoint] database password must be generated, not a placeholder" >&2; exit 1 ;;
 esac
 for name in JWT_ACCESS_SECRET JWT_REFRESH_SECRET WEBHOOK_HMAC_SECRET; do
-  eval "value=\${$name:-}"
+  case "$name" in
+    JWT_ACCESS_SECRET) value="${JWT_ACCESS_SECRET:-}" ;;
+    JWT_REFRESH_SECRET) value="${JWT_REFRESH_SECRET:-}" ;;
+    WEBHOOK_HMAC_SECRET) value="${WEBHOOK_HMAC_SECRET:-}" ;;
+  esac
   case "$value" in
     ""|change-me*|changeme*) echo "[entrypoint] $name must be generated, not a placeholder" >&2; exit 1 ;;
   esac
