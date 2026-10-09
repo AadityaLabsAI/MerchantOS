@@ -9,6 +9,7 @@ import { Permissions, PermissionsGuard } from '../rbac/rbac.guard.js';
 import { assertStoreAccess } from '../rbac/store-access.js';
 import { loadConfig } from '../config/config.js';
 import { PaymentService } from './payment.service.js';
+import { qrPng } from '@merchantos/qr';
 
 const PaymentWebhookInput = z.object({
   id: z.string().min(1).max(200),
@@ -23,6 +24,21 @@ const PaymentWebhookInput = z.object({
 @UseGuards(AuthGuard, PermissionsGuard)
 export class PaymentController {
   constructor(private readonly svc: PaymentService) {}
+
+  @Public()
+  @Get('qr/:token')
+  async qr(@Param('token') token: string, @Res({ passthrough: true }) res: any) {
+    const session = await this.svc.getByToken(token);
+    if (!['CREATED', 'PENDING', 'PROCESSING'].includes(session.state)) {
+      throw new HttpException({ code: 'PAYMENT_LINK_INACTIVE', message: 'payment link is no longer active' }, 410);
+    }
+    const cfg = loadConfig();
+    const base = cfg.WEB_BASE_URL.replace(/\\/$/, '');
+    const url = `${base}/pay/${encodeURIComponent(token)}`;
+    res.header('Content-Type', 'image/png');
+    res.header('Cache-Control', 'no-store, max-age=0');
+    return qrPng(url, 300);
+  }
 
   @Post('sessions')
   @Permissions(PERMISSIONS.BILLING_CREATE)
@@ -101,8 +117,8 @@ async function load() {
     pill.className = 'state ' + cls;
     pill.textContent = label;
     const btn = document.getElementById('btn');
-    if (p.state === 'VERIFIED' || p.state === 'SUCCESS') { btn.textContent = '✓ Paid'; btn.disabled = true; }
-    else if (p.state === 'CREATED' || p.state === 'PENDING') { btn.textContent = 'Simulate demo payment'; btn.disabled = false; btn.onclick = simulate; }
+    if (p.state === 'VERIFIED' || p.state === 'SUCCESS') { btn.textContent = 'Demo state: paid'; btn.disabled = true; }
+    else if (p.state === 'CREATED' || p.state === 'PENDING' || p.state === 'PROCESSING') { btn.textContent = 'Sandbox only — no real payment'; btn.disabled = true; }
     else { btn.textContent = '—'; btn.disabled = true; }
     const exp = new Date(p.expiresAt);
     document.getElementById('info').textContent = (p.state === 'CREATED' || p.state === 'PENDING') ? 'Expires ' + exp.toLocaleString() : '';
