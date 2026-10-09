@@ -4,6 +4,11 @@
 **/node_modules/
 **/.tsbuildinfo
 
+# Built SPA assets (regenerated from web/dist/ via build:web)
+api/src/landing/spa_app.js
+api/src/landing/spa_app.css
+api/src/landing/spa_index.html
+
 # Env / secrets
 .env
 .env.local
