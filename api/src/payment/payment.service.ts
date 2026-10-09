@@ -50,7 +50,13 @@ export class PaymentService {
   async getByToken(token: string): Promise<{
     amount: { currency: string; minor: string }; description: string | null; expiresAt: Date; state: PaymentState; merchantId: string; storeId: string;
   }> {
-    // Expire unpaid sessions on access; a link never remains payable indefinitely.\n    await query(\n      `UPDATE payment_sessions SET state = 'EXPIRED', updated_at = now()\n        WHERE payment_token = $1 AND state IN ('CREATED', 'PENDING') AND expires_at <= now()`,\n      [token],\n    );\n    const r = await query(
+    // Expire unpaid sessions on access; a link never remains payable indefinitely.
+    await query(
+      `UPDATE payment_sessions SET state = 'EXPIRED'
+        WHERE payment_token = $1 AND state IN ('CREATED', 'PENDING') AND expires_at <= now()`,
+      [token],
+    );
+    const r = await query(
       `SELECT amount_minor, currency, description, expires_at, state, merchant_id, store_id
          FROM payment_sessions WHERE payment_token = $1`, [token]);
     if (!r.rows[0]) throw new NotFoundException('payment session not found');
