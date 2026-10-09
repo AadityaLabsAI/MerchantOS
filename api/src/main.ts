@@ -49,6 +49,9 @@ async function bootstrap() {
     reply.header('X-DNS-Prefetch-Control', 'off');
     reply.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
     if (cfg.NODE_ENV === 'production') {
+      reply.header('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'; upgrade-insecure-requests");
+    }
+    if (cfg.NODE_ENV === 'production') {
       reply.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
     }
     return payload;
