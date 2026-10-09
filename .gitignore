@@ -1,0 +1,31 @@
+# Build outputs
+**/dist/
+**/build/
+**/node_modules/
+**/.tsbuildinfo
+
+# Built SPA assets (regenerated from web/dist/ via build:web)
+api/src/landing/spa_app.js
+api/src/landing/spa_app.css
+api/src/landing/spa_index.html
+
+# Env / secrets
+.env
+.env.local
+.env.production
+**/secrets.json
+**/secrets/*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.log
+
+# Test
+coverage/
+.nyc_output/
+
+# e2b sandbox leftovers
+e2b_sandbox_id.txt
+/tmp/

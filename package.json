@@ -6,8 +6,9 @@
   "license": "MIT",
   "scripts": {
     "build:packages": "for p in packages/*/; do (cd \"$p\" && npm install --no-audit --no-fund && npm run build); done",
+    "build:web": "cd web && npm install --no-audit --no-fund && node build.mjs && cp dist/app.js dist/app.css dist/index.html ../api/src/landing/spa_app.js ../api/src/landing/spa_app.css ../api/src/landing/spa_index.html",
     "build:api": "cd api && npm install --no-audit --no-fund && npm run build",
-    "build": "npm run build:packages && npm run build:api",
+    "build": "npm run build:packages && npm run build:web && npm run build:api",
     "migrate": "bin/migrate",
     "seed": "bin/seed",
     "dev": "cd api && npm run dev",
