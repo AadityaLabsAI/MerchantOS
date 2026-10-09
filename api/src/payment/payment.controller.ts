@@ -15,7 +15,7 @@ const PaymentWebhookInput = z.object({
   type: z.enum(['payment.succeeded', 'payment.failed', 'payment.processing', 'payment.expired', 'payment.refunded', 'payment.cancelled']),
   providerSessionId: z.string().min(1).max(200),
   providerPaymentId: z.string().min(1).max(200).optional(),
-  amount: z.object({ currency: z.string().length(3), minor: z.string().regex(/^\\d+$/) }).strict(),
+  amount: z.object({ currency: z.string().length(3), minor: z.string().regex(/^\d+$/) }).strict(),
   occurredAt: z.string().datetime(),
 }).strict();
 
