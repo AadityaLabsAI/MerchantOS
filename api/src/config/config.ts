@@ -27,7 +27,7 @@ const Schema = z.object({
   WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().nonnegative().default(300),
 
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
-  WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
+  WEB_BASE_URL: z.string().url().default('http://localhost:4000'),
   CORS_ORIGINS: z.string().default(''),
   // Comma-separated exact proxy IPs/CIDRs trusted for forwarded headers. Empty means trust none.
   TRUSTED_PROXIES: z.string().default(''),
