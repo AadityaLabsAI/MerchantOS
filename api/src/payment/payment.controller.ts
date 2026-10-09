@@ -33,7 +33,7 @@ export class PaymentController {
       throw new HttpException({ code: 'PAYMENT_LINK_INACTIVE', message: 'payment link is no longer active' }, 410);
     }
     const cfg = loadConfig();
-    const base = cfg.WEB_BASE_URL.replace(/\\/$/, '');
+    const base = cfg.WEB_BASE_URL.replace(/\/$/, '');
     const url = `${base}/pay/${encodeURIComponent(token)}`;
     res.header('Content-Type', 'image/png');
     res.header('Cache-Control', 'no-store, max-age=0');

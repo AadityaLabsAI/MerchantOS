@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { loadConfig } from '../config/config.js';
 import { ROLE_PERMISSIONS, type AuthContext, type Role } from '@merchantos/shared-types';
 import { query } from '../db/db.js';
+import type {} from 'fastify';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);

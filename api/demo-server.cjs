@@ -1,3 +1,9 @@
+// ============================================================================
+// !! DEMO / PREVIEW ONLY !!
+// This server intentionally accepts ANY email/password ("OWNER bypass") so the
+// sandbox preview works without registration. NEVER use this server in
+// production. Run the real NestJS API (npm start) for real deployments.
+// ============================================================================
 // MerchantOS — sandbox demo server.
 // Serves the built SPA + a complete in-memory mock API.
 // Open http://localhost:3000 and the full UI will work with sample data.
@@ -265,18 +271,50 @@ app.get('/api/reports/today', async (req, reply) => {
   const total = today.reduce((s, t) => s + t.amount, 0);
   const byMethod = {};
   today.forEach(t => { byMethod[t.method] = (byMethod[t.method] || 0) + t.amount; });
+  const payments = today;
+  const paymentsCount = today.length;
+  const refunds = state.transactions.filter(t => t.kind === 'SALE' && t.status === 'REFUNDED');
+  const refundsCount = refunds.length;
+  const refundsValue = refunds.reduce((s, t) => s + t.amount, 0);
+  const outstandingKhata = state.customers.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
   return {
-    salesCount: today.length, totalSales: total, byMethod,
+    // Flat fields expected by the Dashboard
+    totalSales: total, totalSalesCount: today.length,
+    payments: total, paymentsCount,
+    refunds: refundsValue, refundsCount,
+    outstandingKhata,
+    // Nested fields used by the Reports page
+    salesCount: today.length, byMethod,
     billsCount: state.bills.length, expensesTotal: state.expenses.reduce((s, e) => s + e.amount, 0),
     inventory: { totalSkus: state.products.length, lowStock: state.products.filter(p => p.stock < p.lowStock).length, stockValue: state.products.reduce((s, p) => s + p.stock * p.costPrice, 0) },
-    khata: { outstanding: state.customers.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0), credit: state.customers.filter(c => c.balance > 0).reduce((s, c) => s + c.balance, 0) },
+    khata: { outstanding: outstandingKhata, credit: state.customers.filter(c => c.balance > 0).reduce((s, c) => s + c.balance, 0) },
   };
 });
 app.get('/api/reports/top-products', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  // Simulated top sellers
-  return state.products.map((p, i) => ({ ...p, soldToday: [12, 8, 15, 23, 19, 6, 9, 11][i] || 5 })).sort((a, b) => b.soldToday - a.soldToday);
+  // Real-API shape: { products: [{ productId, name, quantity, revenueMinor, currency }] }
+  const days = Math.max(1, Math.min(365, Number(req.query?.days) || 30));
+  return {
+    products: state.products.map((p, i) => {
+      const soldToday = [12, 8, 15, 23, 19, 6, 9, 11][i] || 5;
+      const quantity = soldToday * days;
+      const revenue = quantity * p.price;
+      return {
+        productId: p.id, name: p.name, quantity,
+        revenueMinor: String(Math.round(revenue * 100)), currency: 'INR',
+      };
+    }).sort((a, b) => Number(BigInt(b.revenueMinor) - BigInt(a.revenueMinor))),
+  };
 });
+// Outstanding khata (customers that owe money) - matches real API contract
+app.get('/api/reports/outstanding-khata', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const total = state.customers
+    .filter(c => (c.balance < 0))  // negative balance = customer owes merchant (sign convention: + credit extended, - payment received)
+    .reduce((s, c) => s + Math.abs(c.balance), 0);
+  return { outstandingMinor: String(Math.round(total * 100)), currency: 'INR' };
+});
+// Back-compat alias
 app.get('/api/reports/khata', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
   return state.customers.filter(c => c.balance !== 0);
