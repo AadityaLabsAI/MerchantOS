@@ -53,7 +53,7 @@ export class PaymentService {
     // Expire unpaid sessions on access; a link never remains payable indefinitely.
     await query(
       `UPDATE payment_sessions SET state = 'EXPIRED'
-        WHERE payment_token = $1 AND state IN ('CREATED', 'PENDING') AND expires_at <= now()`,
+        WHERE payment_token = $1 AND state IN ('CREATED', 'PENDING', 'PROCESSING') AND expires_at <= now()`,
       [token],
     );
     const r = await query(
