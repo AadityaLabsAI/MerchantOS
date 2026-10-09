@@ -1,6 +1,7 @@
 // MerchantOS v1.3 — Single-page app, no build step
 const $ = (s, r=document) => r.querySelector(s);
-const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const $ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtINR = (m) => '₹' + (Number(m||0)/100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtINRshort = (m) => {
   const n = Number(m||0)/100;
@@ -160,7 +161,7 @@ async function render() {
       case 'settings': return await renderSettings(p);
     }
   } catch (err) {
-    p.innerHTML = `<div class="empty"><div class="empty-ico">⚠️</div><h4>Error</h4><p>${err.message}</p></div>`;
+    p.innerHTML = `<div class="empty"><div class="empty-ico">⚠️</div><h4>Error</h4><p>${esc(err.message)}</p></div>`;
   }
 }
 
@@ -223,7 +224,7 @@ async function renderHome(p) {
           <div class="tx-sub">${fmtTime(r.sub)}</div>
         </div>
         <div class="tx-amount">${fmtINR(r.amount)}</div>
-        <div class="tx-state ${r.state?.toLowerCase()}">${r.state}</div>
+        <div class="tx-state ${r.state?.toLowerCase()}">${esc(r.state)}</div>
       </div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">🧾</div><h4>No bills yet today</h4><p>Create your first bill</p><button onclick="openBillCreator()">+ New bill</button></div>`}
   `;
 }
@@ -306,11 +307,11 @@ function showPaymentResult(sess) {
       <div class="result-amount">₹${rupees}</div>
       <div class="result-state" id="payState" style="background:rgba(245,158,11,.12);color:var(--warn)">⏳ Awaiting payment</div>
       <div class="qr-box"><img src="${qrUrl}" alt="QR"></div>
-      <div class="share-link">${link}</div>
+      <div class="share-link">${esc(link)}</div>
       <div class="status-wait"><div class="spinner"></div> Waiting for customer to scan &amp; pay…</div>
       <div class="action-row">
-        <button onclick="navigator.clipboard.writeText('${link}');toast('Link copied','ok')">📋 Copy link</button>
-        <button class="primary" onclick="window.open('${link}','_blank')">Open pay page ↗</button>
+        <button onclick="navigator.clipboard.writeText('${esc(link)}');toast('Link copied','ok')">📋 Copy link</button>
+        <button class="primary" onclick="window.open('${esc(link)}','_blank')">Open pay page ↗</button>
       </div>
       <div class="action-row">
         <button onclick="simulatePay('${sess.paymentToken}')" id="simBtn">✓ Mark as paid (demo)</button>
@@ -395,11 +396,11 @@ function customerCard(c) {
   const bal = Number(c.balanceMinor);
   const cls = bal > 0 ? 'pos' : bal < 0 ? 'neg' : 'zero';
   const label = bal > 0 ? 'owes' : bal < 0 ? 'advance' : 'clear';
-  return `<div class="cust-card" data-name="${c.name}" data-phone="${c.phone||''}" onclick="openCustomer('${c.id}')">
+  return `<div class="cust-card" data-name="${esc(c.name)}" data-phone="${esc(c.phone||'')}" onclick="openCustomer('${c.id}')">
     <div class="cust-avatar">${c.name[0].toUpperCase()}</div>
     <div class="cust-body">
-      <div class="cust-name">${c.name}</div>
-      <div class="cust-phone">${c.phone || '—'}</div>
+      <div class="cust-name">${esc(c.name)}</div>
+      <div class="cust-phone">${esc(c.phone || '—')}</div>
     </div>
     <div style="text-align:right">
       <div class="cust-balance ${cls}">${fmtINR(Math.abs(bal))}</div>
@@ -526,7 +527,7 @@ async function renderBills(p) {
           <div class="tx-sub">${fmtTime(b.createdAt || b.created_at)} · ${(b.id||'').slice(-8)}</div>
         </div>
         <div class="tx-amount">${fmtINR(b.totalMinor || b.total_minor)}</div>
-        <div class="tx-state ${b.state?.toLowerCase()}">${b.state}</div>
+        <div class="tx-state ${b.state?.toLowerCase()}">${esc(b.state)}</div>
       </div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">🧾</div><h4>No bills yet</h4><p>Create your first bill</p><button onclick="openBillCreator()">+ New bill</button></div>`}
   `;
 }
@@ -540,10 +541,10 @@ async function openBillCreator() {
   STORE.cart = []; STORE.cartCustomer = null;
   openSheet('New bill', `
     <div class="field"><label>Customer</label>
-      <select id="bcCust"><option value="">Walk-in</option>${customers.map(c => `<option value="${c.id}">${c.name}${Number(c.balanceMinor)>0?' (owes '+fmtINR(c.balanceMinor)+')':''}</option>`).join('')}</select>
+      <select id="bcCust"><option value="">Walk-in</option>${customers.map(c => `<option value="${c.id}">${esc(c.name)}${Number(c.balanceMinor)>0?' (owes '+fmtINR(c.balanceMinor)+')':''}</option>`).join('')}</select>
     </div>
     <div class="field"><label>Add product</label>
-      <select id="bcProd"><option value="">Choose a product…</option>${products.map(p => `<option value="${p.id}" data-price="${p.price.minor}" data-name="${p.name}" data-stock="${p.stockCount}">${p.name} — ${fmtINR(p.price.minor)} (${p.stockCount} in stock)</option>`).join('')}</select>
+      <select id="bcProd"><option value="">Choose a product…</option>${products.map(p => `<option value="${p.id}" data-price="${p.price.minor}" data-name="${esc(p.name)}" data-stock="${p.stockCount}">${esc(p.name)} — ${fmtINR(p.price.minor)} (${p.stockCount} in stock)</option>`).join('')}</select>
     </div>
     <div id="bcCart"></div>
     <div class="totals" id="bcTotals" style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px">
@@ -560,7 +561,7 @@ async function openBillCreator() {
     $('#bcCart').innerHTML = items.length ? items.map((it, i) => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px">
         <div>
-          <div style="font-weight:600">${it.name}</div>
+          <div style="font-weight:600">${esc(it.name)}</div>
           <div style="color:var(--text-mute);font-size:11px">${fmtINR(it.unitPriceMinor)} × ${it.quantity}</div>
         </div>
         <div style="display:flex;gap:4px;align-items:center">
@@ -633,8 +634,8 @@ async function renderProducts(p) {
       <div class="tx">
         <div class="tx-ico">📦</div>
         <div class="tx-body">
-          <div class="tx-title">${pr.name}</div>
-          <div class="tx-sub">${pr.sku || '—'} · ${pr.category || '—'}</div>
+          <div class="tx-title">${esc(pr.name)}</div>
+          <div class="tx-sub">${esc(pr.sku || '—')} · ${esc(pr.category || '—')}</div>
         </div>
         <div style="text-align:right">
           <div class="tx-amount">${fmtINR(pr.price.minor)}</div>
@@ -679,8 +680,8 @@ async function renderSuppliers(p) {
       <div class="tx">
         <div class="tx-ico">🚚</div>
         <div class="tx-body">
-          <div class="tx-title">${s.name}</div>
-          <div class="tx-sub">${s.phone || '—'}</div>
+          <div class="tx-title">${esc(s.name)}</div>
+          <div class="tx-sub">${esc(s.phone || '—')}</div>
         </div>
       </div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">🚚</div><h4>No suppliers</h4></div>`}
   `;
@@ -713,8 +714,8 @@ async function renderExpenses(p) {
       <div class="tx">
         <div class="tx-ico">💸</div>
         <div class="tx-body">
-          <div class="tx-title">${e.description || e.category}</div>
-          <div class="tx-sub">${fmtDate(e.occurredAt || e.occurred_at)} · ${e.category}</div>
+          <div class="tx-title">${esc(e.description || e.category)}</div>
+          <div class="tx-sub">${fmtDate(e.occurredAt || e.occurred_at)} · ${esc(e.category)}</div>
         </div>
         <div class="tx-amount">${fmtINR(e.amountMinor || e.amount_minor)}</div>
       </div>`).join('')}</div>` : `<div class="empty"><div class="empty-ico">💸</div><h4>No expenses tracked</h4><button onclick="addExpense()">+ Add expense</button></div>`}
@@ -772,7 +773,7 @@ async function renderReports(p) {
       <div class="tx">
         <div class="tx-ico">📦</div>
         <div class="tx-body">
-          <div class="tx-title">${pr.name}</div>
+          <div class="tx-title">${esc(pr.name)}</div>
           <div class="tx-sub">${pr.quantity} sold</div>
         </div>
         <div class="tx-amount">${fmtINR(pr.revenueMinor)}</div>
@@ -846,12 +847,12 @@ function renderSettings(p) {
       </div>
       <div class="menu-item" onclick="go('home')">
         <div class="menu-ico">🏠</div>
-        <div class="menu-body"><div class="menu-title">Store</div><div class="menu-sub">${STORE.storeName}</div></div>
+        <div class="menu-body"><div class="menu-title">Store</div><div class="menu-sub">${esc(STORE.storeName)}</div></div>
         <div class="menu-arrow">›</div>
       </div>
       <div class="menu-item" onclick="alert('Logged in as: ' + (STORE.user?.email || '') + '\\nRole: ' + (STORE.user?.role || '') + '\\nPermissions: ' + (STORE.user?.permissions?.length || 0))">
         <div class="menu-ico">👤</div>
-        <div class="menu-body"><div class="menu-title">Account</div><div class="menu-sub">${STORE.user?.email || ''} · ${STORE.user?.role || ''}</div></div>
+        <div class="menu-body"><div class="menu-title">Account</div><div class="menu-sub">${esc(STORE.user?.email || '')} · ${esc(STORE.user?.role || '')}</div></div>
         <div class="menu-arrow">›</div>
       </div>
       <div class="menu-item" onclick="installPWA()">
