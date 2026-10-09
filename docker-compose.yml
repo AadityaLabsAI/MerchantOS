@@ -35,7 +35,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set in .env}
       WEBHOOK_HMAC_SECRET: ${WEBHOOK_HMAC_SECRET:?set in .env}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:4000}
-      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:4000}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       AI_ENABLED: ${AI_ENABLED:-false}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
