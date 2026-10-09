@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ulid } from '@merchantos/crypto';
 import { MoneySchema } from '@merchantos/validation';
 import { PERMISSIONS } from '@merchantos/shared-types';
-import { query } from '../db/db.js';
+import { query, withTx } from '../db/db.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { Permissions, PermissionsGuard } from '../rbac/rbac.guard.js';
 import { assertStoreAccess } from '../rbac/store-access.js';
@@ -63,24 +63,25 @@ export class ProductController {
     if (p.price.currency.length !== 3) throw new BadRequestException('invalid price currency');
     const id = ulid();
     try {
-      await query(
-        `INSERT INTO products (id, merchant_id, store_id, sku, barcode, name, category, description,
-                               price_minor, cost_minor, currency, tax_bps, stock_count, low_stock_threshold)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-        [id, req.auth.merchantId, p.storeId, p.sku, p.barcode ?? null, p.name, p.category ?? null,
-         p.description ?? null, p.price.minor, p.cost?.minor ?? '0', p.price.currency, p.taxBps, p.stockCount, p.lowStockThreshold]);
+      await withTx(async (c) => {
+        await c.query(
+          `INSERT INTO products (id, merchant_id, store_id, sku, barcode, name, category, description,
+                                 price_minor, cost_minor, currency, tax_bps, stock_count, low_stock_threshold)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+          [id, req.auth.merchantId, p.storeId, p.sku, p.barcode ?? null, p.name, p.category ?? null,
+           p.description ?? null, p.price.minor, p.cost?.minor ?? '0', p.price.currency, p.taxBps, p.stockCount, p.lowStockThreshold]);
+        if (p.stockCount > 0) {
+          await c.query(
+            `INSERT INTO stock_movements (id, merchant_id, store_id, product_id, type, quantity, actor_user_id, notes)
+             VALUES ($1, $2, $3, $4, 'ADJUSTMENT', $5, $6, 'opening stock')`,
+            [ulid(), req.auth.merchantId, p.storeId, id, p.stockCount, req.auth.userId]);
+        }
+      });
     } catch (err) {
-      if (String((err as Error).message).includes('duplicate key value') && String((err as Error).message).includes('sku')) {
-        throw new BadRequestException('SKU already exists in this store');
+      if ((err as any)?.code === '23505') {
+        throw new BadRequestException('Product SKU or barcode already exists in this store');
       }
       throw err;
-    }
-    if (p.stockCount > 0) {
-      // Record an opening stock movement.
-      await query(
-        `INSERT INTO stock_movements (id, merchant_id, store_id, product_id, type, quantity, actor_user_id, notes)
-         VALUES ($1, $2, $3, $4, 'ADJUSTMENT', $5, $6, 'opening stock')`,
-        [ulid(), req.auth.merchantId, p.storeId, id, p.stockCount, req.auth.userId]);
     }
     await this.audit.write({ merchantId: req.auth.merchantId, storeId: p.storeId, actorUserId: req.auth.userId,
       action: 'product.create', targetType: 'product', targetId: id, requestId: req.id, ip: req.ip,
