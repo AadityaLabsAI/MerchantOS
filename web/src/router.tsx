@@ -16,6 +16,7 @@ import { BillsPage } from '@/pages/Bills';
 import { ExpensesPage } from '@/pages/Expenses';
 import { ShiftsPage } from '@/pages/Shifts';
 import { SettingsPage } from '@/pages/Settings';
+import { CustomerViewPage } from '@/pages/CustomerView';
 import { ShiftOpenGate } from '@/pages/ShiftOpenGate';
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
@@ -116,9 +117,16 @@ const settingsRoute = createRoute({
   component: () => <ShiftOpenGate><SettingsPage /></ShiftOpenGate>,
 });
 
+const customerViewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/pay/cst_$id',
+  component: CustomerViewPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
+  customerViewRoute,
   appLayout.addChildren([
     dashboardRoute, acceptRoute, posRoute, transactionsRoute, khataRoute,
     partyDetailRoute, productsRoute, suppliersRoute, billsRoute,

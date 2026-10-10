@@ -60,3 +60,12 @@ export function ToastContainer() {
     </div>
   );
 }
+
+
+// Convenience helper for direct usage
+export const toast = {
+  success: (msg: string) => useToastStore.getState().add({ type: 'success', message: msg }),
+  error: (msg: string) => useToastStore.getState().add({ type: 'error', message: msg }),
+  info: (msg: string) => useToastStore.getState().add({ type: 'info', message: msg }),
+  warn: (msg: string) => useToastStore.getState().add({ type: 'warning', message: msg }),
+};

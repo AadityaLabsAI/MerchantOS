@@ -73,6 +73,26 @@ const state = {
   tokens: new Set(),
 };
 
+const SHOP_SETTINGS = {
+  name: 'Sharma Kirana Store',
+  ownerName: 'Rajesh Kumar',
+  phone: '+91 98765 43210',
+  address: 'Main Market, Sector 22, Noida',
+  upiId: 'sharmakirana@upi',
+  gst: '27ABCDE1234F1Z5',
+  language: 'hinglish',
+  currency: 'INR',
+};
+
+const LEDGERS = [
+  { id: 'l1', customerId: 'c1', type: 'CREDIT',  amount: 500,  note: 'Groceries',     createdAt: '2026-10-05T10:00:00Z' },
+  { id: 'l2', customerId: 'c1', type: 'PAYMENT', amount: 50,   note: 'Cash',          createdAt: '2026-10-07T11:23:00Z' },
+  { id: 'l3', customerId: 'c2', type: 'CREDIT',  amount: 1500, note: 'Monthly kirana',createdAt: '2026-10-04T14:30:00Z' },
+  { id: 'l4', customerId: 'c2', type: 'CREDIT',  amount: 300,  note: 'Milk',          createdAt: '2026-10-06T17:45:00Z' },
+  { id: 'l5', customerId: 'c4', type: 'CREDIT',  amount: 2300, note: 'Bulk order',    createdAt: '2026-10-05T14:00:00Z' },
+  { id: 'l6', customerId: 'c5', type: 'CREDIT',  amount: 380,  note: 'Soap + oil',    createdAt: '2026-10-08T08:30:00Z' },
+];
+
 // ============================================================================
 // Auth helpers
 // ============================================================================
@@ -533,3 +553,153 @@ app.listen({ port: Number(PORT), host: '0.0.0.0' }, (err) => {
   if (err) { console.error(err); process.exit(1); }
   console.log(`MerchantOS demo server listening on http://localhost:${PORT}`);
 });
+
+
+// ============================================================
+// PHASE 2 FEATURES — autonomous enhancement for production use
+// ============================================================
+
+// Low stock alerts (sorted by severity, with reorder suggestions)
+app.get('/api/product/low-stock', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const items = PRODUCTS
+    .filter(p => p.active !== false)
+    .map(p => ({
+      ...p,
+      severity: p.stock <= 0 ? 'out' : p.stock <= (p.lowStock || 5) ? 'low' : 'ok',
+      suggestedReorder: Math.max((p.lowStock || 10) * 3 - p.stock, 0),
+      estimatedCost: p.costPrice ? Math.max((p.lowStock || 10) * 3 - p.stock, 0) * p.costPrice : 0,
+    }))
+    .filter(p => p.severity !== 'ok')
+    .sort((a, b) => (a.stock - b.stock));
+  return { items, count: items.length, totalReorderCost: items.reduce((s, i) => s + i.estimatedCost, 0) };
+});
+
+// Bulk payment (settle one customer's multiple invoices in one tap)
+app.post('/api/customer/bulk-pay', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const body = req.body || {};
+  const cust = CUSTOMERS.find(c => c.id === body.customerId);
+  if (!cust) return reply.code(404).send({ error: 'customer not found' });
+  const amt = Number(body.amount) || 0;
+  if (amt <= 0) return reply.code(400).send({ error: 'amount must be > 0' });
+  cust.balance = (cust.balance || 0) - amt;
+  cust.lastTxnAt = now();
+  LEDGERS.push({
+    id: 'l' + Date.now(),
+    customerId: cust.id,
+    type: 'PAYMENT',
+    amount: amt,
+    note: body.note || 'Bulk payment',
+    method: body.method || 'CASH',
+    createdAt: now(),
+  });
+  return { ok: true, newBalance: cust.balance, id: 'l' + Date.now() };
+});
+
+// Customer ledger statement
+app.get('/api/customer/:id/statement', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const cust = CUSTOMERS.find(c => c.id === req.params.id);
+  if (!cust) return reply.code(404).send({ error: 'not found' });
+  let entries = LEDGERS.filter(l => l.customerId === cust.id);
+  const totalCredit = entries.filter(e => e.type === 'CREDIT').reduce((s, e) => s + e.amount, 0);
+  const totalPaid = entries.filter(e => e.type === 'PAYMENT').reduce((s, e) => s + e.amount, 0);
+  return {
+    customer: cust,
+    entries: entries.slice(-100),
+    summary: { totalCredit, totalPaid, netBalance: cust.balance, entryCount: entries.length },
+  };
+});
+
+// Daily summary
+app.get('/api/reports/daily', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const date = req.query.date ? new Date(req.query.date) : new Date();
+  const dateStr = date.toISOString().slice(0, 10);
+  const dayBills = state.bills.filter(b => b.createdAt && b.createdAt.slice(0, 10) === dateStr);
+  const totalSales = dayBills.reduce((s, b) => s + b.total, 0);
+  const cashSales = dayBills.filter(b => b.method === 'CASH').reduce((s, b) => s + b.total, 0);
+  const upiSales = dayBills.filter(b => b.method === 'UPI').reduce((s, b) => s + b.total, 0);
+  const dayExpenses = state.expenses.filter(e => e.createdAt && e.createdAt.slice(0, 10) === dateStr);
+  const totalExpenses = dayExpenses.reduce((s, e) => s + e.amount, 0);
+  const dayUdhar = LEDGERS.filter(l => l.createdAt && l.createdAt.slice(0, 10) === dateStr && l.type === 'CREDIT');
+  const dayPaasa = LEDGERS.filter(l => l.createdAt && l.createdAt.slice(0, 10) === dateStr && l.type === 'PAYMENT');
+  const outstandingKhata = CUSTOMERS.reduce((s, c) => s + Math.max(0, c.balance || 0), 0);
+  return {
+    date: dateStr,
+    bills: { count: dayBills.length, total: totalSales, cash: cashSales, upi: upiSales, credit: dayBills.filter(b => b.method === 'CREDIT').reduce((s, b) => s + b.total, 0) },
+    expenses: { count: dayExpenses.length, total: totalExpenses },
+    khata: { udharGiven: dayUdhar.reduce((s, l) => s + l.amount, 0), paasaReceived: dayPaasa.reduce((s, l) => s + l.amount, 0), outstandingTotal: outstandingKhata },
+    netCashflow: cashSales + upiSales + dayPaasa.reduce((s, l) => s + l.amount, 0) - totalExpenses,
+  };
+});
+
+// Shop settings
+app.get('/api/shop/settings', async (req, reply) => { if (!requireAuth(req, reply)) return; return SHOP_SETTINGS; });
+app.put('/api/shop/settings', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  Object.assign(SHOP_SETTINGS, req.body || {});
+  return SHOP_SETTINGS;
+});
+
+// UPI QR
+app.get('/api/payment/upi-qr', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const amt = Number(req.query.amount) || 0;
+  const note = req.query.note || 'Payment';
+  const upi = SHOP_SETTINGS.upiId || 'merchant@upi';
+  const shopName = encodeURIComponent(SHOP_SETTINGS.name || 'MerchantOS');
+  const qr = `upi://pay?pa=${encodeURIComponent(upi)}&pn=${shopName}&am=${amt}&cu=INR&tn=${encodeURIComponent(note)}`;
+  return { qr, upi, amount: amt, note };
+});
+
+// Backup
+app.get('/api/backup', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  return {
+    version: 1, exportedAt: now(), shop: SHOP_SETTINGS,
+    products: PRODUCTS, customers: CUSTOMERS, suppliers: SUPPLIERS,
+    bills: state.bills, expenses: state.expenses, ledgers: LEDGERS, shift: state.shift,
+  };
+});
+
+// Restore
+app.post('/api/restore', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const body = req.body || {};
+  if (body.shop) Object.assign(SHOP_SETTINGS, body.shop);
+  if (Array.isArray(body.products)) PRODUCTS.length = 0, PRODUCTS.push(...body.products);
+  if (Array.isArray(body.customers)) CUSTOMERS.length = 0, CUSTOMERS.push(...body.customers);
+  if (Array.isArray(body.suppliers)) SUPPLIERS.length = 0, SUPPLIERS.push(...body.suppliers);
+  if (Array.isArray(body.bills)) state.bills.length = 0, state.bills.push(...body.bills);
+  if (Array.isArray(body.expenses)) state.expenses.length = 0, state.expenses.push(...body.expenses);
+  if (Array.isArray(body.ledgers)) LEDGERS.length = 0, LEDGERS.push(...body.ledgers);
+  if (body.shift) state.shift = body.shift;
+  return { ok: true };
+});
+
+// Customer lookup by phone
+app.get('/api/customer/lookup', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const phone = (req.query.phone || '').replace(/[^0-9]/g, '');
+  if (!phone || phone.length < 4) return { matches: [] };
+  const matches = CUSTOMERS.filter(c => (c.phone || '').replace(/[^0-9]/g, '').includes(phone)).slice(0, 5);
+  return { matches };
+});
+
+// Public customer view (for shareable link /pay/cst_<id> — NO AUTH)
+app.get('/api/public/customer/:id', async (req, reply) => {
+  const cust = CUSTOMERS.find(c => c.id === req.params.id);
+  if (!cust) return reply.code(404).send({ error: 'not found' });
+  const entries = LEDGERS.filter(l => l.customerId === cust.id).slice(-50);
+  return {
+    customer: { id: cust.id, name: cust.name, phone: cust.phone, balance: cust.balance, lastTxnAt: cust.lastTxnAt },
+    entries,
+    shop: SHOP_SETTINGS,
+  };
+});
+
+// ============================================================
+// END PHASE 2 FEATURES
+// ============================================================

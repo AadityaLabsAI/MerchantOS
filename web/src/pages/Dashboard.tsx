@@ -16,6 +16,7 @@ export function DashboardPage() {
   const today = useQuery({ queryKey: ['reports-today'], queryFn: () => api.get<Today>('/api/reports/today') });
   const top = useQuery({ queryKey: ['reports-top'], queryFn: () => api.get<TopProduct[]>('/api/reports/top-products?limit=5') });
   const khata = useQuery({ queryKey: ['reports-khata'], queryFn: () => api.get<Outstanding[]>('/api/reports/outstanding-khata?limit=5') });
+  const lowStock = useQuery({ queryKey: ['low-stock'], queryFn: () => api.get<{ items: any[]; count: number; totalReorderCost: number }>('/api/product/low-stock') });
 
   const loading = today.isLoading;
 
@@ -35,6 +36,24 @@ export function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {/* LOW STOCK ALERT BANNER */}
+      {lowStock.data && lowStock.data.count > 0 && (
+        <Link to="/app/products">
+          <div className="bg-gradient-to-r from-warning-500 to-warning-600 text-white rounded-xl p-4 flex items-center gap-3 shadow-md hover:shadow-lg transition-shadow cursor-pointer">
+            <div className="size-10 rounded-full bg-white/20 grid place-items-center shrink-0">
+              <AlertTriangle className="size-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold">{lowStock.data.count} items low on stock</div>
+              <div className="text-sm text-white/90 truncate">
+                Reorder cost: {inr(lowStock.data.totalReorderCost)} · Tap to see & restock
+              </div>
+            </div>
+            <div className="text-2xl shrink-0">→</div>
+          </div>
+        </Link>
+      )}
 
       {/* HERO STAT CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
