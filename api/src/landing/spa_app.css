@@ -499,6 +499,9 @@ video {
 [hidden]:where(:not([hidden="until-found"])) {
   display: none;
 }
+.static {
+  position: static;
+}
 .fixed {
   position: fixed;
 }
@@ -560,6 +563,9 @@ video {
 }
 .z-50 {
   z-index: 50;
+}
+.m-4 {
+  margin: 1rem;
 }
 .mx-auto {
   margin-left: auto;
@@ -1512,6 +1518,9 @@ video {
 }
 .text-white\/90 {
   color: rgb(255 255 255 / 0.9);
+}
+.underline {
+  text-decoration-line: underline;
 }
 .opacity-60 {
   opacity: 0.6;

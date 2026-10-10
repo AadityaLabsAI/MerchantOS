@@ -5,22 +5,24 @@ import {
   Package, Users, Clock, AlertTriangle, Bell, Wallet,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { Card, CardBody, BigMoney, Button, Avatar, Badge, Skeleton } from '@/lib/ui';
+import { Card, CardBody, BigMoney, Button, Avatar, Badge, Skeleton, ErrorBoundary } from '@/lib/ui';
 import { inr, shortDate, cn } from '@/lib/utils';
 
 type Today = { totalSales: number; totalSalesCount: number; payments: number; paymentsCount: number; refunds: number; refundsCount: number; outstandingKhata: number };
-type TopProduct = { productId: string; name: string; qty: number; revenue: number };
+type TopProduct = { productId: string; name: string; quantity: number; revenueMinor: string; currency: string };
+type TopResponse = { products: TopProduct[] };
 type Outstanding = { customerId: string; name: string; balance: number; lastTxnAt?: string };
 
 export function DashboardPage() {
   const today = useQuery({ queryKey: ['reports-today'], queryFn: () => api.get<Today>('/api/reports/today') });
-  const top = useQuery({ queryKey: ['reports-top'], queryFn: () => api.get<TopProduct[]>('/api/reports/top-products?limit=5') });
+  const top = useQuery({ queryKey: ['reports-top'], queryFn: () => api.get<TopResponse>('/api/reports/top-products?limit=5') });
   const khata = useQuery({ queryKey: ['reports-khata'], queryFn: () => api.get<Outstanding[]>('/api/reports/outstanding-khata?limit=5') });
   const lowStock = useQuery({ queryKey: ['low-stock'], queryFn: () => api.get<{ items: any[]; count: number; totalReorderCost: number }>('/api/product/low-stock') });
 
   const loading = today.isLoading;
 
   return (
+    <ErrorBoundary>
     <div className="p-4 lg:p-8 pb-24 lg:pb-8 max-w-7xl mx-auto space-y-6">
       {/* HEADER */}
       <div className="flex items-end justify-between">
@@ -38,7 +40,7 @@ export function DashboardPage() {
       </div>
 
       {/* LOW STOCK ALERT BANNER */}
-      {lowStock.data && lowStock.data.count > 0 && (
+      {lowStock.data && (lowStock.data as any).count > 0 && (
         <Link to="/app/products">
           <div className="bg-gradient-to-r from-warning-500 to-warning-600 text-white rounded-xl p-4 flex items-center gap-3 shadow-md hover:shadow-lg transition-shadow cursor-pointer">
             <div className="size-10 rounded-full bg-white/20 grid place-items-center shrink-0">
@@ -133,16 +135,16 @@ export function DashboardPage() {
                 </div>
               ) : (top.data ?? []).length === 0 ? (
                 <div className="p-10 text-center text-sm text-gray-500">No sales today yet. Accept your first payment →</div>
-              ) : (top.data ?? []).map((p, i) => (
+              ) : (top.data?.products ?? []).map((p, i) => (
                 <div key={p.productId} className="flex items-center gap-4 px-5 py-3.5">
                   <div className="size-9 rounded-lg bg-brand-50 text-brand-700 font-bold grid place-items-center text-sm shrink-0">
                     {i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-gray-900 truncate">{p.name}</div>
-                    <div className="text-xs text-gray-500">{p.qty} units sold</div>
+                    <div className="text-xs text-gray-500">{p.quantity} units sold</div>
                   </div>
-                  <div className="amount font-bold text-gray-900">{inr(p.revenue)}</div>
+                  <div className="amount font-bold text-gray-900">{inr(Number(p.revenueMinor) / 100)}</div>
                 </div>
               ))}
             </div>
@@ -216,6 +218,7 @@ export function DashboardPage() {
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }
 

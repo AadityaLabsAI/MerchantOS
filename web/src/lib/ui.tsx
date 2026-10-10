@@ -136,3 +136,26 @@ export function Modal({ children, onClose, title }: { children: ReactNode; onClo
     </div>
   );
 }
+
+
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+
+export class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('ErrorBoundary caught:', error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return this.props.fallback || (
+        <div className="p-6 m-4 bg-error-50 border border-error-200 rounded-xl">
+          <div className="font-bold text-error-900 mb-1">Something broke here</div>
+          <div className="text-sm text-error-700 mb-2">{this.state.error.message}</div>
+          <button onClick={() => this.setState({ error: null })} className="text-xs text-brand-600 underline">Retry</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
