@@ -64,8 +64,8 @@ export function ToastContainer() {
 
 // Convenience helper for direct usage
 export const toast = {
-  success: (msg: string) => useToastStore.getState().add({ type: 'success', message: msg }),
-  error: (msg: string) => useToastStore.getState().add({ type: 'error', message: msg }),
-  info: (msg: string) => useToastStore.getState().add({ type: 'info', message: msg }),
-  warn: (msg: string) => useToastStore.getState().add({ type: 'warning', message: msg }),
+  success: (msg: string) => useToastStore.getState().push(msg, 'success'),
+  error: (msg: string) => useToastStore.getState().push(msg, 'error'),
+  info: (msg: string) => useToastStore.getState().push(msg, 'info'),
+  warn: (msg: string) => useToastStore.getState().push(msg, 'warning'),
 };
