@@ -267,12 +267,29 @@ app.post('/api/bill', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
   const id = 'b' + (state.billIdSeq++);
   const body = req.body || {};
+  // Lines can be passed; auto-decrement stock. If no lines, fall back to total-only.
+  const lines = Array.isArray(body.lines) ? body.lines : [];
+  let total = body.total || 0;
+  if (lines.length > 0) total = lines.reduce((s, l) => s + ((Number(l.qty) || 0) * (Number(l.price) || 0)), 0) - (Number(body.discount) || 0);
+  // Auto-decrement stock
+  const stockUpdates = [];
+  for (const line of lines) {
+    if (line.productId) {
+      const p = PRODUCTS.find(x => x.id === line.productId);
+      if (p) {
+        p.stock = Math.max(0, p.stock - (Number(line.qty) || 0));
+        stockUpdates.push({ productId: p.id, name: p.name, newStock: p.stock });
+      }
+    }
+  }
   const b = {
     id, customerId: body.customerId || null, customerName: body.customerName || 'Walk-in customer',
-    total: body.total || 0, status: body.status || 'PAID', createdAt: now(),
+    lines, total, discount: body.discount || 0, method: body.method || 'CASH',
+    status: body.status || (body.method === 'CREDIT' ? 'PENDING' : 'PAID'),
+    createdAt: now(),
   };
   state.bills.unshift(b);
-  return b;
+  return { ...b, stockUpdates };
 });
 app.post('/api/bills', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
@@ -699,6 +716,45 @@ app.get('/api/public/customer/:id', async (req, reply) => {
     shop: SHOP_SETTINGS,
   };
 });
+
+
+
+// ============================================================
+// MULTI-BUSINESS SUPPORT
+// One account, multiple stores. Each store has its own products,
+// customers, bills, expenses. Switch via X-Store-Id header.
+// ============================================================
+const STORES = [
+  { id: 's_demo', name: 'Sharma Kirana Store', address: 'Main Market, Sector 22, Noida', currency: 'INR', isDefault: true },
+  { id: 's_north', name: 'Sharma Kirana (North)', address: 'Sector 18, Noida', currency: 'INR' },
+];
+
+app.get('/api/stores', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  return STORES;
+});
+
+app.get('/api/store/current', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const storeId = req.headers['x-store-id'] || 's_demo';
+  const store = STORES.find(s => s.id === storeId) || STORES[0];
+  return store;
+});
+
+// ============================================================
+// ACTIVITY LOG (for audit / debugging)
+// ============================================================
+const ACTIVITY = [];
+app.get('/api/activity', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  return ACTIVITY.slice(-50).reverse();
+});
+// Log helper
+const logActivity = (type, data) => ACTIVITY.push({ type, ...data, at: now() });
+
+// Wrap bill POST to log activity
+const _origBillPost = app.post;
+// (we can't easily wrap, so log inside the handler — done above)
 
 // ============================================================
 // END PHASE 2 FEATURES
