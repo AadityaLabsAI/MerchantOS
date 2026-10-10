@@ -7,6 +7,11 @@
 // MerchantOS — sandbox demo server.
 // Serves the built SPA + a complete in-memory mock API.
 // Open http://localhost:3000 and the full UI will work with sample data.
+//
+// API CONTRACT: This server mirrors the SHAPE the v1.3.0 SPA expects
+// (singular resource names: /api/bill, /api/customer, /api/expense,
+// /api/payment, /api/product, /api/shift, /api/supplier). The plural forms
+// are also exposed as back-compat aliases.
 
 const Fastify = require('fastify');
 const path = require('node:path');
@@ -16,105 +21,81 @@ const crypto = require('node:crypto');
 const PORT = process.env.PORT || 3000;
 const app = Fastify({ logger: false });
 
-// ---- In-memory state ----
+// ============================================================================
+// Sample data
+// ============================================================================
+const now = () => new Date().toISOString();
+
+const PRODUCTS = [
+  { id: 'p1', sku: 'BRS-001', name: 'Basmati Rice 5kg',        category: 'Grocery',       price: 549, costPrice: 480, stock: 42, lowStock: 10, unit: 'pack', hsn: '1006', gstRate: 5,  active: true },
+  { id: 'p2', sku: 'OIL-002', name: 'Mustard Oil 1L',          category: 'Grocery',       price: 165, costPrice: 140, stock: 8,  lowStock: 10, unit: 'btl',  hsn: '1514', gstRate: 5,  active: true },
+  { id: 'p3', sku: 'TEA-003', name: 'Tata Tea Premium 1kg',    category: 'Beverages',     price: 480, costPrice: 410, stock: 22, lowStock: 8,  unit: 'pack', hsn: '0902', gstRate: 5,  active: true },
+  { id: 'p4', sku: 'MLK-004', name: 'Amul Toned Milk 500ml',   category: 'Dairy',         price: 27,  costPrice: 23,  stock: 65, lowStock: 20, unit: 'pkt',  hsn: '0401', gstRate: 0,  active: true },
+  { id: 'p5', sku: 'BIS-005', name: 'Parle-G Biscuit 800g',    category: 'Snacks',        price: 95,  costPrice: 80,  stock: 38, lowStock: 15, unit: 'pack', hsn: '1905', gstRate: 12, active: true },
+  { id: 'p6', sku: 'SOAP-006',name: 'Lux Soap (pack of 4)',    category: 'Personal Care', price: 175, costPrice: 145, stock: 5,  lowStock: 10, unit: 'pack', hsn: '3401', gstRate: 18, active: true },
+  { id: 'p7', sku: 'CHG-007', name: 'Surf Excel 1kg',          category: 'Home Care',     price: 215, costPrice: 180, stock: 14, lowStock: 8,  unit: 'pack', hsn: '3402', gstRate: 18, active: true },
+  { id: 'p8', sku: 'ATTA-008',name: 'Aashirvaad Atta 10kg',     category: 'Grocery',       price: 410, costPrice: 360, stock: 28, lowStock: 10, unit: 'pack', hsn: '1101', gstRate: 0,  active: true },
+];
+
+const CUSTOMERS = [
+  { id: 'c1', name: 'Amit Verma',    phone: '+91 98101 23456', balance: -450,  partyType: 'CREDIT', lastTxnAt: '2026-10-07T11:23:00Z' },
+  { id: 'c2', name: 'Priya Singh',   phone: '+91 99202 34567', balance: 1200,  partyType: 'CREDIT', lastTxnAt: '2026-10-06T17:45:00Z' },
+  { id: 'c3', name: 'Suresh Patel',  phone: '+91 99803 45678', balance: 0,     partyType: 'CASH',   lastTxnAt: '2026-10-08T09:12:00Z' },
+  { id: 'c4', name: 'Kavita Joshi',  phone: '+91 90104 56789', balance: -2300, partyType: 'CREDIT', lastTxnAt: '2026-10-05T14:00:00Z' },
+  { id: 'c5', name: 'Rohit Mehta',   phone: '+91 98705 67890', balance: 380,   partyType: 'CREDIT', lastTxnAt: '2026-10-08T08:30:00Z' },
+  { id: 'c6', name: 'Anjali Desai',  phone: '+91 98906 78901', balance: -150,  partyType: 'CREDIT', lastTxnAt: '2026-10-07T19:20:00Z' },
+];
+
+const SUPPLIERS = [
+  { id: 'su1', name: 'Agro Distributors',  phone: '+91 99882 11111', balance: -12500, gstin: '09AAABB1234C1Z5' },
+  { id: 'su2', name: 'Haldiram Wholesale', phone: '+91 99882 22222', balance: 0,      gstin: '09AAACC2345D1Z6' },
+  { id: 'su3', name: 'Dairy Fresh Co.',    phone: '+91 99882 33333', balance: -3200 },
+];
+
+// Mutable in-memory state
 const state = {
-  merchant: { id: 'm_demo', name: 'Sharma Kirana Store', ownerEmail: 'demo@merchantos.in', phone: '+91 98765 43210', settings: { currency: 'INR' } },
-  store:    { id: 's_demo', merchantId: 'm_demo', name: 'Main Store', address: 'Shop 14, Sector 18 Market', city: 'Noida', state: 'UP', pincode: '201301', phone: '+91 98765 43210', gstin: '09ABCDE1234F1Z5' },
-  user:     { id: 'u_demo', merchantId: 'm_demo', storeId: 's_demo', name: 'Rajesh Sharma', email: 'demo@merchantos.in', phone: '+91 98765 43210', role: 'OWNER', permissions: ['*'] },
-  tokens:   new Set(),
-  shift:    { id: 'sh_demo', status: 'OPEN', openedAt: new Date().toISOString(), openingFloat: 500 },
-  products: [
-    { id: 'p1', merchantId: 'm_demo', storeId: 's_demo', sku: 'BRS-001', name: 'Basmati Rice 5kg', category: 'Grocery', price: 549, costPrice: 480, stock: 42, lowStock: 10, unit: 'pack', hsn: '1006', gstRate: 5, active: true },
-    { id: 'p2', merchantId: 'm_demo', storeId: 's_demo', sku: 'OIL-002', name: 'Mustard Oil 1L', category: 'Grocery', price: 165, costPrice: 140, stock: 8, lowStock: 10, unit: 'btl', hsn: '1514', gstRate: 5, active: true },
-    { id: 'p3', merchantId: 'm_demo', storeId: 's_demo', sku: 'TEA-003', name: 'Tata Tea Premium 1kg', category: 'Beverages', price: 480, costPrice: 410, stock: 22, lowStock: 8, unit: 'pack', hsn: '0902', gstRate: 5, active: true },
-    { id: 'p4', merchantId: 'm_demo', storeId: 's_demo', sku: 'MLK-004', name: 'Amul Toned Milk 500ml', category: 'Dairy', price: 27, costPrice: 23, stock: 65, lowStock: 20, unit: 'pkt', hsn: '0401', gstRate: 0, active: true },
-    { id: 'p5', merchantId: 'm_demo', storeId: 's_demo', sku: 'BIS-005', name: 'Parle-G Biscuit 800g', category: 'Snacks', price: 95, costPrice: 80, stock: 38, lowStock: 15, unit: 'pack', hsn: '1905', gstRate: 12, active: true },
-    { id: 'p6', merchantId: 'm_demo', storeId: 's_demo', sku: 'SOAP-006', name: 'Lux Soap (pack of 4)', category: 'Personal Care', price: 175, costPrice: 145, stock: 5, lowStock: 10, unit: 'pack', hsn: '3401', gstRate: 18, active: true },
-    { id: 'p7', merchantId: 'm_demo', storeId: 's_demo', sku: 'CHG-007', name: 'Surf Excel 1kg', category: 'Home Care', price: 215, costPrice: 180, stock: 14, lowStock: 8, unit: 'pack', hsn: '3402', gstRate: 18, active: true },
-    { id: 'p8', merchantId: 'm_demo', storeId: 's_demo', sku: 'ATTA-008', name: 'Aashirvaad Atta 10kg', category: 'Grocery', price: 410, costPrice: 360, stock: 28, lowStock: 10, unit: 'pack', hsn: '1101', gstRate: 0, active: true },
-  ],
-  customers: [
-    { id: 'c1', merchantId: 'm_demo', storeId: 's_demo', name: 'Amit Verma', phone: '+91 98101 23456', balance: -450, partyType: 'CREDIT', lastTxn: '2026-10-07T11:23:00Z' },
-    { id: 'c2', merchantId: 'm_demo', storeId: 's_demo', name: 'Priya Singh', phone: '+91 99202 34567', balance: 1200, partyType: 'CREDIT', lastTxn: '2026-10-06T17:45:00Z' },
-    { id: 'c3', merchantId: 'm_demo', storeId: 's_demo', name: 'Suresh Patel', phone: '+91 99803 45678', balance: 0, partyType: 'CASH', lastTxn: '2026-10-08T09:12:00Z' },
-    { id: 'c4', merchantId: 'm_demo', storeId: 's_demo', name: 'Kavita Joshi', phone: '+91 90104 56789', balance: -2300, partyType: 'CREDIT', lastTxn: '2026-10-05T14:00:00Z' },
-    { id: 'c5', merchantId: 'm_demo', storeId: 's_demo', name: 'Rohit Mehta', phone: '+91 98705 67890', balance: 380, partyType: 'CREDIT', lastTxn: '2026-10-08T08:30:00Z' },
-    { id: 'c6', merchantId: 'm_demo', storeId: 's_demo', name: 'Anjali Desai', phone: '+91 98906 78901', balance: -150, partyType: 'CREDIT', lastTxn: '2026-10-07T19:20:00Z' },
-  ],
-  suppliers: [
-    { id: 'su1', merchantId: 'm_demo', storeId: 's_demo', name: 'Agro Distributors', phone: '+91 99882 11111', balance: -12500, gstin: '09AAABB1234C1Z5' },
-    { id: 'su2', merchantId: 'm_demo', storeId: 's_demo', name: 'Haldiram Wholesale', phone: '+91 99882 22222', balance: 0, gstin: '09AAACC2345D1Z6' },
-    { id: 'su3', merchantId: 'm_demo', storeId: 's_demo', name: 'Dairy Fresh Co.', phone: '+91 99882 33333', balance: -3200 },
-  ],
-  transactions: [
-    { id: 't1', merchantId: 'm_demo', storeId: 's_demo', kind: 'SALE', status: 'COMPLETED', method: 'UPI', amount: 549, customerId: 'c3', createdAt: '2026-10-08T16:42:00Z', upiRef: '512345678901' },
-    { id: 't2', merchantId: 'm_demo', storeId: 's_demo', kind: 'SALE', status: 'COMPLETED', method: 'CASH', amount: 142, customerId: null, createdAt: '2026-10-08T15:20:00Z' },
-    { id: 't3', merchantId: 'm_demo', storeId: 's_demo', kind: 'SALE', status: 'COMPLETED', method: 'UPI', amount: 950, customerId: 'c5', createdAt: '2026-10-08T14:15:00Z', upiRef: '512345678902' },
-    { id: 't4', merchantId: 'm_demo', storeId: 's_demo', kind: 'COLLECTION', status: 'COMPLETED', method: 'CASH', amount: 200, customerId: 'c2', createdAt: '2026-10-08T13:08:00Z' },
-    { id: 't5', merchantId: 'm_demo', storeId: 's_demo', kind: 'SALE', status: 'COMPLETED', method: 'UPI', amount: 1275, customerId: null, createdAt: '2026-10-08T11:45:00Z', upiRef: '512345678903' },
-    { id: 't6', merchantId: 'm_demo', storeId: 's_demo', kind: 'SALE', status: 'REFUNDED', method: 'CARD', amount: 320, customerId: 'c1', createdAt: '2026-10-07T18:33:00Z' },
-    { id: 't7', merchantId: 'm_demo', storeId: 's_demo', kind: 'SALE', status: 'COMPLETED', method: 'UPI', amount: 410, customerId: 'c3', createdAt: '2026-10-07T16:00:00Z', upiRef: '512345678904' },
-    { id: 't8', merchantId: 'm_demo', storeId: 's_demo', kind: 'SALE', status: 'COMPLETED', method: 'CASH', amount: 95, customerId: null, createdAt: '2026-10-07T13:25:00Z' },
-  ],
+  customerIdSeq: 7,
+  productIdSeq: 9,
+  supplierIdSeq: 4,
+  billIdSeq: 3,
+  expenseIdSeq: 5,
+  paymentSeq: 0,
   bills: [
-    { id: 'b1', merchantId: 'm_demo', storeId: 's_demo', number: 'INV-2026-0042', customerId: 'c5', total: 950, status: 'PAID', createdAt: '2026-10-08T14:15:00Z', items: [{ name: 'Basmati Rice 5kg', qty: 1, price: 549 }, { name: 'Parle-G 800g', qty: 1, price: 95 }, { name: 'Amul Milk 500ml', qty: 4, price: 27 }, { name: 'Tea 1kg', qty: 1, price: 248 }] },
-    { id: 'b2', merchantId: 'm_demo', storeId: 's_demo', number: 'INV-2026-0041', customerId: 'c3', total: 549, status: 'PAID', createdAt: '2026-10-08T11:45:00Z', items: [{ name: 'Basmati Rice 5kg', qty: 1, price: 549 }] },
+    { id: 'b1', customerId: 'c5', customerName: 'Rohit Mehta', total: 950, status: 'PAID',  createdAt: '2026-10-08T14:15:00Z' },
+    { id: 'b2', customerId: 'c3', customerName: 'Suresh Patel',total: 549, status: 'PAID',  createdAt: '2026-10-08T11:45:00Z' },
   ],
   expenses: [
-    { id: 'e1', merchantId: 'm_demo', storeId: 's_demo', category: 'Rent', amount: 18000, note: 'October rent', createdAt: '2026-10-01T09:00:00Z' },
-    { id: 'e2', merchantId: 'm_demo', storeId: 's_demo', category: 'Electricity', amount: 2400, note: 'BSES bill Sep', createdAt: '2026-10-03T14:00:00Z' },
-    { id: 'e3', merchantId: 'm_demo', storeId: 's_demo', category: 'Salary', amount: 12000, note: 'Helper - October', createdAt: '2026-10-05T10:00:00Z' },
-    { id: 'e4', merchantId: 'm_demo', storeId: 's_demo', category: 'Stock', amount: 8500, note: 'Local sundry items', createdAt: '2026-10-07T18:00:00Z' },
+    { id: 'e1', category: 'Rent',        amount: 18000, note: 'October rent',       createdAt: '2026-10-01T09:00:00Z' },
+    { id: 'e2', category: 'Electricity', amount: 2400,  note: 'BSES bill Sep',      createdAt: '2026-10-03T14:00:00Z' },
+    { id: 'e3', category: 'Salary',      amount: 12000, note: 'Helper - October',   createdAt: '2026-10-05T10:00:00Z' },
   ],
-  shifts: [
-    { id: 'sh1', merchantId: 'm_demo', storeId: 's_demo', status: 'CLOSED', openedAt: '2026-10-07T08:00:00Z', closedAt: '2026-10-07T21:30:00Z', openingFloat: 500, closingFloat: 2840, salesCount: 42, salesTotal: 18650 },
-    { id: 'sh2', merchantId: 'm_demo', storeId: 's_demo', status: 'CLOSED', openedAt: '2026-10-06T08:00:00Z', closedAt: '2026-10-06T21:00:00Z', openingFloat: 500, closingFloat: 3120, salesCount: 38, salesTotal: 15900 },
-    { id: 'sh3', merchantId: 'm_demo', storeId: 's_demo', status: 'OPEN', openedAt: '2026-10-08T08:00:00Z', openingFloat: 500 },
-  ],
-  ledger: {
-    c1: [
-      { id: 'l1', kind: 'UDHAR', amount: 1200, note: 'Groceries', createdAt: '2026-10-01T10:30:00Z' },
-      { id: 'l2', kind: 'PAASA', amount: 500, note: 'Cash received', createdAt: '2026-10-03T16:00:00Z' },
-      { id: 'l3', kind: 'UDHAR', amount: 350, note: 'Atta + Oil', createdAt: '2026-10-05T14:20:00Z' },
-      { id: 'l4', kind: 'PAASA', amount: 600, note: 'GPay', createdAt: '2026-10-07T11:00:00Z' },
-    ],
-    c2: [
-      { id: 'l1', kind: 'UDHAR', amount: 1500, note: 'Monthly grocery', createdAt: '2026-09-28T11:00:00Z' },
-      { id: 'l2', kind: 'PAASA', amount: 300, note: 'Partial', createdAt: '2026-10-02T18:00:00Z' },
-    ],
-    c4: [
-      { id: 'l1', kind: 'UDHAR', amount: 800, note: 'Big basket', createdAt: '2026-09-20T15:00:00Z' },
-      { id: 'l2', kind: 'UDHAR', amount: 1500, note: 'Party supplies', createdAt: '2026-10-02T12:00:00Z' },
-    ],
-    c5: [
-      { id: 'l1', kind: 'UDHAR', amount: 380, note: 'Evening snacks', createdAt: '2026-10-08T08:30:00Z' },
-    ],
-    c6: [
-      { id: 'l1', kind: 'UDHAR', amount: 450, note: 'Misc', createdAt: '2026-10-06T19:20:00Z' },
-      { id: 'l2', kind: 'PAASA', amount: 300, note: 'Cash', createdAt: '2026-10-07T15:00:00Z' },
-    ],
-  },
+  shift: null, // { shiftId, status, openedAt, openingCash, closingCash, closedAt }
+  tokens: new Set(),
 };
 
-// ---- Helpers ----
+// ============================================================================
+// Auth helpers
+// ============================================================================
 function makeToken() { return crypto.randomBytes(24).toString('hex'); }
 function requireAuth(req, reply) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) { reply.code(401).send({ error: 'unauthorized' }); return false; }
-  const tok = auth.slice(7);
-  if (!state.tokens.has(tok)) { reply.code(401).send({ error: 'invalid token' }); return false; }
+  const h = req.headers.authorization || '';
+  const t = h.startsWith('Bearer ') ? h.slice(7) : '';
+  if (!state.tokens.has(t)) { reply.code(401).send({ error: 'unauthorized' }); return false; }
   return true;
 }
-const iso = d => new Date(d).toISOString();
 
-// ---- Auth ----
+// ============================================================================
+// Auth
+// ============================================================================
 app.post('/auth/login', async (req, reply) => {
   const { email, phone, password } = req.body || {};
   if (!email && !phone) return reply.code(400).send({ error: 'email or phone required' });
-  // OWNER bypass — accept any credential in demo
   const access = makeToken(); const refresh = makeToken();
   state.tokens.add(access); state.tokens.add(refresh);
-  return { accessToken: access, refreshToken: refresh, user: state.user };
+  return {
+    accessToken: access, refreshToken: refresh,
+    user: { id: 'u_demo', merchantId: 'm_demo', storeId: 's_demo', name: 'Rajesh Sharma', email: email || 'demo@merchantos.in', role: 'OWNER', permissions: ['*'] },
+  };
 });
 app.post('/auth/refresh', async (req, reply) => {
   const { refreshToken } = req.body || {};
@@ -122,245 +103,433 @@ app.post('/auth/refresh', async (req, reply) => {
   const access = makeToken(); state.tokens.add(access);
   return { accessToken: access, refreshToken };
 });
-app.post('/auth/register', async () => ({ ok: true }));
 app.post('/auth/logout', async () => ({ ok: true }));
 app.get('/auth/me', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  return state.user;
+  return { id: 'u_demo', merchantId: 'm_demo', storeId: 's_demo', name: 'Rajesh Sharma', email: 'demo@merchantos.in', phone: '+91 98765 43210', role: 'OWNER', permissions: ['*'] };
 });
 
-// ---- Health ----
-app.get('/healthz', async () => ({ ok: true, time: iso(new Date()) }));
+// ============================================================================
+// Products  (SPA uses /api/product singular; also expose /api/products)
+// ============================================================================
+app.get('/api/product', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const { search = '', limit = '200' } = req.query || {};
+  const q = String(search).toLowerCase();
+  const list = PRODUCTS.filter(p => !q || p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q));
+  return list.slice(0, Number(limit) || 200);
+});
+app.get('/api/products', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  return PRODUCTS;
+});
+app.post('/api/product', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const id = 'p' + (state.productIdSeq++);
+  const body = req.body || {};
+  const p = {
+    id, sku: body.sku || `SKU-${id}`, name: body.name || 'New Product',
+    category: body.category || 'General', price: Number(body.price) || 0, costPrice: Number(body.costPrice) || 0,
+    stock: Number(body.stock) || 0, lowStock: Number(body.lowStock) || 5,
+    unit: body.unit || 'pcs', hsn: body.hsn || '', gstRate: Number(body.gstRate) || 0, active: true,
+  };
+  PRODUCTS.push(p);
+  return p;
+});
 
-// ---- Customers (khata) ----
+// ============================================================================
+// Customers  (SPA uses /api/customer singular; also /api/customers)
+// ============================================================================
+app.get('/api/customer', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const { search = '' } = req.query || {};
+  const q = String(search).toLowerCase();
+  if (!q) return CUSTOMERS;
+  return CUSTOMERS.filter(c => c.name.toLowerCase().includes(q) || (c.phone || '').includes(q));
+});
 app.get('/api/customers', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const { q } = req.query || {};
-  let list = state.customers;
-  if (q) list = list.filter(c => c.name.toLowerCase().includes(String(q).toLowerCase()));
-  return list;
+  return CUSTOMERS;
+});
+app.post('/api/customer', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const id = 'c' + (state.customerIdSeq++);
+  const body = req.body || {};
+  const c = {
+    id, name: body.name || 'New Customer', phone: body.phone || null,
+    balance: 0, partyType: 'CREDIT', lastTxnAt: now(),
+  };
+  CUSTOMERS.push(c);
+  return c;
+});
+app.get('/api/customer/:id', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const c = CUSTOMERS.find(x => x.id === req.params.id);
+  if (!c) return reply.code(404).send({ error: 'not found' });
+  return c;
+});
+app.get('/api/customer/:id/ledger', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  // Generate sample ledger based on balance
+  const c = CUSTOMERS.find(x => x.id === req.params.id);
+  if (!c) return reply.code(404).send({ error: 'not found' });
+  const bal = c.balance;
+  return [
+    { id: 'l1', type: 'UDHAR',  amount: Math.abs(bal) || 500, note: 'Groceries', createdAt: '2026-10-01T10:00:00Z' },
+    { id: 'l2', type: 'PAASA',  amount: bal < 0 ? Math.abs(bal) : 200, note: 'Partial payment', createdAt: '2026-10-05T15:00:00Z' },
+  ];
+});
+app.post('/api/customer/:id/ledger', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const body = req.body || {};
+  const cust = CUSTOMERS.find(c => c.id === req.params.id);
+  if (!cust) return reply.code(404).send({ error: 'not found' });
+  // Update customer balance based on entry type
+  const amt = Number(body.amount) || 0;
+  if (body.type === 'UDHAR' || body.type === 'CREDIT') {
+    cust.balance = (cust.balance || 0) + amt;
+  } else if (body.type === 'PAASA' || body.type === 'DEBIT' || body.type === 'PAYMENT') {
+    cust.balance = (cust.balance || 0) - amt;
+  } else if (body.type === 'ADJUSTMENT') {
+    cust.balance = amt;
+  }
+  cust.lastTxnAt = now();
+  return { ok: true, id: 'l' + Date.now(), newBalance: cust.balance };
 });
 app.get('/api/customers/:id', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const c = state.customers.find(x => x.id === req.params.id);
-  return c || { error: 'not found' };
-});
-app.post('/api/customers', async (req, reply) => {
-  if (!requireAuth(req, reply)) return;
-  const c = { id: 'c' + (state.customers.length + 1), merchantId: 'm_demo', storeId: 's_demo', balance: 0, partyType: 'CREDIT', lastTxn: iso(new Date()), ...req.body };
-  state.customers.unshift(c);
+  const c = CUSTOMERS.find(x => x.id === req.params.id);
+  if (!c) return reply.code(404).send({ error: 'not found' });
   return c;
 });
 app.get('/api/customers/:id/ledger', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  return state.ledger[req.params.id] || [];
-});
-app.post('/api/customers/:id/ledger', async (req, reply) => {
-  if (!requireAuth(req, reply)) return;
-  const list = state.ledger[req.params.id] = state.ledger[req.params.id] || [];
-  const entry = { id: 'l' + (list.length + 1), createdAt: iso(new Date()), ...req.body };
-  list.unshift(entry);
-  const cust = state.customers.find(c => c.id === req.params.id);
-  if (cust) {
-    const sign = entry.kind === 'UDHAR' ? -1 : 1;
-    cust.balance = (cust.balance || 0) + sign * entry.amount;
-    cust.lastTxn = entry.createdAt;
-  }
-  return entry;
+  const c = CUSTOMERS.find(x => x.id === req.params.id);
+  if (!c) return reply.code(404).send({ error: 'not found' });
+  return [
+    { id: 'l1', type: 'UDHAR',  amount: Math.abs(c.balance) || 500, note: 'Groceries', createdAt: '2026-10-01T10:00:00Z' },
+  ];
 });
 
-// ---- Products ----
-app.get('/api/products', async (req, reply) => {
+// ============================================================================
+// Suppliers  (SPA uses /api/supplier singular; also /api/suppliers)
+// ============================================================================
+app.get('/api/supplier', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const { q } = req.query || {};
-  let list = state.products;
-  if (q) list = list.filter(p => p.name.toLowerCase().includes(String(q).toLowerCase()) || p.sku.toLowerCase().includes(String(q).toLowerCase()));
-  return list;
+  return SUPPLIERS;
 });
-app.post('/api/products', async (req, reply) => {
-  if (!requireAuth(req, reply)) return;
-  const p = { id: 'p' + (state.products.length + 1), merchantId: 'm_demo', storeId: 's_demo', active: true, ...req.body };
-  state.products.unshift(p);
-  return p;
-});
-
-// ---- Suppliers ----
 app.get('/api/suppliers', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  return state.suppliers;
+  return SUPPLIERS;
 });
-app.post('/api/suppliers', async (req, reply) => {
+app.post('/api/supplier', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const s = { id: 'su' + (state.suppliers.length + 1), merchantId: 'm_demo', storeId: 's_demo', balance: 0, ...req.body };
-  state.suppliers.unshift(s);
+  const id = 'su' + (state.supplierIdSeq++);
+  const body = req.body || {};
+  const s = { id, name: body.name || 'New Supplier', phone: body.phone || null, balance: 0, gstin: body.gstin || null };
+  SUPPLIERS.push(s);
   return s;
 });
 
-// ---- Bills ----
+// ============================================================================
+// Bills  (SPA uses /api/bill singular; also /api/bills)
+// ============================================================================
+app.get('/api/bill', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const { limit = '100' } = req.query || {};
+  return state.bills.slice(0, Number(limit) || 100);
+});
 app.get('/api/bills', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
   return state.bills;
 });
-app.get('/api/bills/:id', async (req, reply) => {
+app.post('/api/bill', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  return state.bills.find(b => b.id === req.params.id);
+  const id = 'b' + (state.billIdSeq++);
+  const body = req.body || {};
+  const b = {
+    id, customerId: body.customerId || null, customerName: body.customerName || 'Walk-in customer',
+    total: body.total || 0, status: body.status || 'PAID', createdAt: now(),
+  };
+  state.bills.unshift(b);
+  return b;
 });
 app.post('/api/bills', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const b = { id: 'b' + (state.bills.length + 1), number: 'INV-2026-' + (43 + state.bills.length), status: 'PAID', createdAt: iso(new Date()), ...req.body };
+  const id = 'b' + (state.billIdSeq++);
+  const body = req.body || {};
+  const b = { id, customerId: body.customerId || null, customerName: body.customerName || 'Walk-in', total: body.total || 0, status: 'PAID', createdAt: now() };
   state.bills.unshift(b);
   return b;
 });
 
-// ---- Expenses ----
+// ============================================================================
+// Expenses  (SPA uses /api/expense singular; also /api/expenses)
+// ============================================================================
+app.get('/api/expense', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const { limit = '100' } = req.query || {};
+  return state.expenses.slice(0, Number(limit) || 100);
+});
 app.get('/api/expenses', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
   return state.expenses;
 });
+app.post('/api/expense', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  const id = 'e' + (state.expenseIdSeq++);
+  const body = req.body || {};
+  const e = { id, category: body.category || 'MISC', amount: Number(body.amount) || 0, note: body.note || null, createdAt: now() };
+  state.expenses.unshift(e);
+  return e;
+});
 app.post('/api/expenses', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const e = { id: 'e' + (state.expenses.length + 1), createdAt: iso(new Date()), ...req.body };
+  const id = 'e' + (state.expenseIdSeq++);
+  const body = req.body || {};
+  const e = { id, category: body.category || 'MISC', amount: Number(body.amount) || 0, note: body.note || null, createdAt: now() };
   state.expenses.unshift(e);
   return e;
 });
 
-// ---- Shifts ----
+// ============================================================================
+// Shifts  (SPA uses /api/shift singular; also /api/shifts)
+// ============================================================================
+app.get('/api/shift/current', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  if (!state.shift) return { open: false, shiftId: null, openedAt: null, openingCash: 0 };
+  return { open: true, shiftId: state.shift.shiftId, openedAt: state.shift.openedAt, openingCash: state.shift.openingCash };
+});
+app.post('/api/shift/open', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  if (state.shift && state.shift.status === 'OPEN') {
+    return { ok: true, shiftId: state.shift.shiftId, openedAt: state.shift.openedAt, openingCash: state.shift.openingCash };
+  }
+  const body = req.body || {};
+  const cash = body.openingCash;
+  const opening = typeof cash === 'object' && cash !== null ? Number(cash.minor || 0) / 100 : Number(cash) || 0;
+  state.shift = {
+    shiftId: 'sh_' + Date.now(),
+    status: 'OPEN',
+    openedAt: now(),
+    openingCash: opening,
+    openedBy: 'u_demo',
+  };
+  return { ok: true, shiftId: state.shift.shiftId, openedAt: state.shift.openedAt, openingCash: opening };
+});
+app.post('/api/shift/:id/close', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  if (!state.shift) return reply.code(400).send({ error: 'no shift open' });
+  const body = req.body || {};
+  const cash = body.closingCash;
+  const closing = typeof cash === 'object' && cash !== null ? Number(cash.minor || 0) / 100 : Number(cash) || 0;
+  state.shift.status = 'CLOSED';
+  state.shift.closedAt = now();
+  state.shift.closingCash = closing;
+  return { ok: true, shiftId: state.shift.shiftId, totalSales: 0 };
+});
 app.get('/api/shifts', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  return state.shifts;
+  return state.shift ? [state.shift] : [];
 });
 app.get('/api/shifts/active', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  return state.shifts.find(s => s.status === 'OPEN') || null;
+  return state.shift && state.shift.status === 'OPEN' ? state.shift : null;
 });
 app.post('/api/shifts', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const s = { id: 'sh' + (state.shifts.length + 1), status: 'OPEN', openedAt: iso(new Date()), merchantId: 'm_demo', storeId: 's_demo', ...req.body };
-  state.shifts.unshift(s);
-  return s;
+  return { ok: true, shiftId: state.shift ? state.shift.shiftId : 'sh_' + Date.now() };
 });
 app.post('/api/shifts/:id/close', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const s = state.shifts.find(x => x.id === req.params.id);
-  if (s) { s.status = 'CLOSED'; s.closedAt = iso(new Date()); }
-  return s;
+  return { ok: true, totalSales: 0 };
 });
 
-// ---- Payments / Transactions ----
-app.get('/api/payments', async (req, reply) => {
+// ============================================================================
+// Transactions list (used by Transactions page; combines bills + payments)
+// ============================================================================
+app.get('/api/payment', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  return state.transactions;
+  const { type = '', search = '', limit = '100' } = req.query || {};
+  const q = String(search).toLowerCase();
+  // Build a unified transaction list from bills
+  const txns = state.bills.map(b => ({
+    id: b.id, type: 'BILL', amount: b.total, status: b.status === 'PAID' ? 'COMPLETED' : 'PENDING',
+    partyName: b.customerName || 'Walk-in customer', note: null, method: b.method || 'CASH',
+    createdAt: b.createdAt,
+  }));
+  // Add sample UPI / expense / khata entries for demo richness
+  txns.push(
+    { id: 'tx_u1', type: 'PAYMENT', amount: 549,  status: 'COMPLETED', partyName: 'Suresh Patel',  note: 'UPI', method: 'UPI', createdAt: '2026-10-08T16:42:00Z' },
+    { id: 'tx_u2', type: 'PAYMENT', amount: 142,  status: 'COMPLETED', partyName: 'Walk-in customer', note: null, method: 'CASH', createdAt: '2026-10-08T15:20:00Z' },
+    { id: 'tx_u3', type: 'PAYMENT', amount: 950,  status: 'COMPLETED', partyName: 'Rohit Mehta',   note: 'UPI', method: 'UPI', createdAt: '2026-10-08T14:15:00Z' },
+    { id: 'tx_u4', type: 'PAASA',  amount: 200,  status: 'COMPLETED', partyName: 'Priya Singh',   note: 'Partial payment', method: 'CASH', createdAt: '2026-10-08T13:08:00Z' },
+    { id: 'tx_u5', type: 'PAYMENT', amount: 1275, status: 'COMPLETED', partyName: 'Walk-in customer', note: 'UPI', method: 'UPI', createdAt: '2026-10-08T11:45:00Z' },
+    { id: 'tx_u6', type: 'REFUND',  amount: 320,  status: 'COMPLETED', partyName: 'Amit Verma',    note: 'Damaged item', method: 'CARD', createdAt: '2026-10-07T18:33:00Z' },
+    { id: 'tx_u7', type: 'PAYMENT', amount: 410,  status: 'COMPLETED', partyName: 'Suresh Patel',  note: 'UPI', method: 'UPI', createdAt: '2026-10-07T16:00:00Z' },
+    { id: 'tx_u8', type: 'UDHAR',  amount: 600,  status: 'COMPLETED', partyName: 'Kavita Joshi',  note: 'Groceries', method: 'CREDIT', createdAt: '2026-10-07T15:00:00Z' },
+    { id: 'tx_e1', type: 'EXPENSE', amount: 18000,status: 'COMPLETED', partyName: 'Landlord',      note: 'October rent', method: 'BANK', createdAt: '2026-10-01T09:00:00Z' },
+    { id: 'tx_e2', type: 'EXPENSE', amount: 2400, status: 'COMPLETED', partyName: 'BSES',          note: 'Electricity', method: 'UPI', createdAt: '2026-10-03T14:00:00Z' },
+    { id: 'tx_e3', type: 'EXPENSE', amount: 12000,status: 'COMPLETED', partyName: 'Helper',        note: 'Salary', method: 'CASH', createdAt: '2026-10-05T10:00:00Z' },
+  );
+  // Filter
+  let filtered = txns;
+  if (type && type !== 'all') filtered = filtered.filter(t => t.type === type);
+  if (q) filtered = filtered.filter(t => (t.partyName || '').toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || (t.note || '').toLowerCase().includes(q));
+  // Sort newest first
+  filtered.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  return filtered.slice(0, Number(limit) || 100);
 });
-app.post('/api/payments', async (req, reply) => {
+
+// ============================================================================
+// Payment sessions  (SPA uses /api/payment/sessions; also /api/payments/sessions)
+// ============================================================================
+app.post('/api/payment/sessions', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const t = { id: 't' + (state.transactions.length + 1), status: 'COMPLETED', createdAt: iso(new Date()), merchantId: 'm_demo', storeId: 's_demo', ...req.body };
-  state.transactions.unshift(t);
-  return t;
+  const body = req.body || {};
+  const id = 'ps_' + Date.now();
+  const token = 'tok_' + crypto.randomBytes(6).toString('hex');
+  const amt = body.amount;
+  return {
+    id, token, qrPayload: 'upi://pay?pa=demo@upi&pn=Sharma%20Kirana%20Store&am=' + (typeof amt === 'object' ? (Number(amt.minor) / 100).toFixed(2) : (amt || 0)),
+    amount: amt || { currency: 'INR', minor: '0' },
+    expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    status: 'CREATED',
+  };
 });
 app.post('/api/payments/sessions', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  return { id: 'ps_demo', token: 'tok_' + crypto.randomBytes(6).toString('hex'), qrPayload: 'upi://pay?pa=demo@upi&pn=' + encodeURIComponent(state.merchant.name), amount: req.body?.amount || 0, expiresAt: iso(Date.now() + 600_000), status: 'PENDING' };
+  const body = req.body || {};
+  const id = 'ps_' + Date.now();
+  const token = 'tok_' + crypto.randomBytes(6).toString('hex');
+  return { id, token, qrPayload: 'upi://pay?pa=demo@upi&pn=Sharma', amount: body.amount, expiresAt: new Date(Date.now() + 600_000).toISOString(), status: 'PENDING' };
 });
-app.get('/pay/:token', async () => ({ token: 'demo', status: 'PENDING' }));
+// (moved to /api/payment/sessions/:token)
+app.get('/api/payments/qr/:token', async (req, reply) => {
+  // Return a 1x1 transparent PNG so the SPA's <img> doesn't break
+  const png = Buffer.from('89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000D49444154789C63600000000200015B2C2D870000000049454E44AE426082', 'hex');
+  reply.header('Content-Type', 'image/png');
+  reply.header('Cache-Control', 'no-store');
+  return png;
+});
+app.get('/api/payment/sessions/:token', async (req, reply) => {
+  if (!requireAuth(req, reply)) return;
+  return { token: req.params.token, status: 'PENDING', amount: { currency: 'INR', minor: '0' } };
+});
+app.get('/api/payment/qr/:token', async (req, reply) => {
+  const png = Buffer.from('89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000D49444154789C63600000000200015B2C2D870000000049454E44AE426082', 'hex');
+  reply.header('Content-Type', 'image/png');
+  reply.header('Cache-Control', 'no-store');
+  return png;
+});
 
-// ---- Reports ----
+// ============================================================================
+// Reports
+// ============================================================================
 app.get('/api/reports/today', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const sales = state.transactions.filter(t => t.kind === 'SALE' && t.status === 'COMPLETED');
-  const today = sales.filter(s => iso(s.createdAt).startsWith('2026-10-08'));
-  const total = today.reduce((s, t) => s + t.amount, 0);
-  const byMethod = {};
-  today.forEach(t => { byMethod[t.method] = (byMethod[t.method] || 0) + t.amount; });
-  const payments = today;
-  const paymentsCount = today.length;
-  const refunds = state.transactions.filter(t => t.kind === 'SALE' && t.status === 'REFUNDED');
-  const refundsCount = refunds.length;
-  const refundsValue = refunds.reduce((s, t) => s + t.amount, 0);
-  const outstandingKhata = state.customers.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
+  const totalSales = 2916, salesCount = 4;
+  const payments = totalSales, paymentsCount = salesCount;
+  const refunds = 320, refundsCount = 1;
+  const outstandingKhata = Math.abs(CUSTOMERS.filter(c => c.balance < 0).reduce((s, c) => s + c.balance, 0));
   return {
     // Flat fields expected by the Dashboard
-    totalSales: total, totalSalesCount: today.length,
-    payments: total, paymentsCount,
-    refunds: refundsValue, refundsCount,
+    totalSales, totalSalesCount: salesCount,
+    payments, paymentsCount,
+    refunds, refundsCount,
     outstandingKhata,
     // Nested fields used by the Reports page
-    salesCount: today.length, byMethod,
+    salesCount, byMethod: { UPI: 2774, CASH: 142 },
     billsCount: state.bills.length, expensesTotal: state.expenses.reduce((s, e) => s + e.amount, 0),
-    inventory: { totalSkus: state.products.length, lowStock: state.products.filter(p => p.stock < p.lowStock).length, stockValue: state.products.reduce((s, p) => s + p.stock * p.costPrice, 0) },
-    khata: { outstanding: outstandingKhata, credit: state.customers.filter(c => c.balance > 0).reduce((s, c) => s + c.balance, 0) },
+    inventory: { totalSkus: PRODUCTS.length, lowStock: PRODUCTS.filter(p => p.stock < p.lowStock).length, stockValue: PRODUCTS.reduce((s, p) => s + p.stock * p.costPrice, 0) },
+    khata: { outstanding: outstandingKhata, credit: CUSTOMERS.filter(c => c.balance > 0).reduce((s, c) => s + c.balance, 0) },
   };
 });
 app.get('/api/reports/top-products', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  // Real-API shape: { products: [{ productId, name, quantity, revenueMinor, currency }] }
-  const days = Math.max(1, Math.min(365, Number(req.query?.days) || 30));
+  const days = Math.max(1, Math.min(365, Number((req.query || {}).days) || 30));
   return {
-    products: state.products.map((p, i) => {
-      const soldToday = [12, 8, 15, 23, 19, 6, 9, 11][i] || 5;
-      const quantity = soldToday * days;
+    products: PRODUCTS.map((p, i) => {
+      const sold = [12, 8, 15, 23, 19, 6, 9, 11][i] || 5;
+      const quantity = sold * days;
       const revenue = quantity * p.price;
-      return {
-        productId: p.id, name: p.name, quantity,
-        revenueMinor: String(Math.round(revenue * 100)), currency: 'INR',
-      };
+      return { productId: p.id, name: p.name, quantity, revenueMinor: String(Math.round(revenue * 100)), currency: 'INR' };
     }).sort((a, b) => Number(BigInt(b.revenueMinor) - BigInt(a.revenueMinor))),
   };
 });
-// Outstanding khata (customers that owe money) - matches real API contract
 app.get('/api/reports/outstanding-khata', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
-  const total = state.customers
-    .filter(c => (c.balance < 0))  // negative balance = customer owes merchant (sign convention: + credit extended, - payment received)
-    .reduce((s, c) => s + Math.abs(c.balance), 0);
-  return { outstandingMinor: String(Math.round(total * 100)), currency: 'INR' };
-});
-// Back-compat alias
-app.get('/api/reports/khata', async (req, reply) => {
-  if (!requireAuth(req, reply)) return;
-  return state.customers.filter(c => c.balance !== 0);
+  const { limit = '5' } = req.query || {};
+  // Return array of customers with negative balance (they owe merchant)
+  const parties = CUSTOMERS
+    .filter(c => c.balance < 0)
+    .map(c => ({ customerId: c.id, name: c.name, balance: Math.abs(c.balance), lastTxnAt: c.lastTxnAt }))
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, Number(limit) || 5);
+  const total = CUSTOMERS.filter(c => c.balance < 0).reduce((s, c) => s + Math.abs(c.balance), 0);
+  return parties;  // SPA Dashboard expects an array
 });
 
-// ---- AI (mock) ----
+// ============================================================================
+// AI assistant
+// ============================================================================
 app.post('/api/assistant/ask', async (req, reply) => {
   if (!requireAuth(req, reply)) return;
   return { id: 'ai_' + Date.now(), reply: 'Demo mode: AI assistant is disabled in the sandbox preview. In production, this routes to your local Ollama instance for fully private, free business insights.' };
 });
 
-// ---- SPA serving ----
+// ============================================================================
+// Health + misc
+// ============================================================================
+app.get('/healthz', async () => ({ ok: true, time: now() }));
+
+// ============================================================================
+// SPA serving
+// ============================================================================
 const HTML = fs.readFileSync(path.join(__dirname, 'src', 'landing', 'spa_index.html'), 'utf-8');
 const JS   = fs.readFileSync(path.join(__dirname, 'src', 'landing', 'spa_app.js'));
 const CSS  = fs.readFileSync(path.join(__dirname, 'src', 'landing', 'spa_app.css'));
 
-app.get('/', async (req, reply) => { reply.type('text/html; charset=utf-8'); reply.header('Cache-Control', 'no-cache'); return HTML; });
-app.get('/app', async (req, reply) => { reply.type('text/html; charset=utf-8'); return HTML; });
-app.get('/app.js', async (req, reply) => { reply.type('application/javascript; charset=utf-8'); reply.header('Cache-Control', 'public, max-age=31536000, immutable'); return JS; });
-app.get('/app.css', async (req, reply) => { reply.type('text/css; charset=utf-8'); reply.header('Cache-Control', 'public, max-age=31536000, immutable'); return CSS; });
-app.get('/manifest.json', async () => ({
-  name: 'MerchantOS — 0% Commission (Demo)', short_name: 'MerchantOS',
-  start_url: '/app', scope: '/app', display: 'standalone',
-  background_color: '#ffffff', theme_color: '#1E3A8A',
-  icons: [{ src: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' }, { src: '/icon-512.svg', sizes: '512x512', type: 'image/svg+xml' }],
-}));
-app.get('/sw.js', async (req, reply) => {
-  reply.type('application/javascript; charset=utf-8');
-  return '// demo sw\nself.addEventListener("install",e=>self.skipWaiting());\nself.addEventListener("activate",e=>self.clients.claim());';
-});
-const ICON_SVG = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1E3A8A"/><stop offset="1" stop-color="#FF6B1A"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#g)"/><text x="256" y="350" font-size="300" text-anchor="middle" fill="white" font-family="sans-serif" font-weight="800">M</text></svg>`;
-app.get('/icon-192.svg', async (req, reply) => { reply.type('image/svg+xml'); return ICON_SVG; });
-app.get('/icon-512.svg', async (req, reply) => { reply.type('image/svg+xml'); return ICON_SVG; });
-app.get('/favicon.ico', async (req, reply) => { reply.type('image/svg+xml'); return ICON_SVG; });
+function setHtml(req, reply) {
+  reply.header('Content-Type', 'text/html; charset=utf-8');
+  reply.header('Cache-Control', 'no-cache');
+  return reply.send(HTML);
+}
+function setJs(req, reply) {
+  reply.header('Content-Type', 'application/javascript; charset=utf-8');
+  reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+  return reply.send(JS);
+}
+function setCss(req, reply) {
+  reply.header('Content-Type', 'text/css; charset=utf-8');
+  reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+  return reply.send(CSS);
+}
 
-// Catch-all for SPA routes
-app.setNotFoundHandler((req, reply) => {
-  if (req.url.startsWith('/api/') || req.url.startsWith('/auth/') || req.url === '/healthz') {
-    return reply.code(404).send({ error: 'not found' });
-  }
-  reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-cache');
-  reply.send(HTML);
+// SPA routes — anything that doesn't start with /api, /auth, /healthz, /pay, or have a dot is HTML
+app.get('/', setHtml);
+app.get('/login', setHtml);
+app.get('/app', setHtml);
+app.get('/app/*', setHtml);
+app.get('/app.js', setJs);
+
+// /pay/:token SPA route (customer-facing payment page) — defined here so setHtml is initialized
+app.get('/pay/:token', setHtml);
+app.get('/app.css', setCss);
+app.get('/manifest.json', async (req, reply) => {
+  reply.header('Content-Type', 'application/manifest+json');
+  return {
+    name: 'MerchantOS', short_name: 'MerchantOS',
+    description: '0% Commission UPI payments, khata, inventory & GST invoicing for Indian shops.',
+    start_url: '/app', display: 'standalone', background_color: '#1E3A8A', theme_color: '#1E3A8A',
+    icons: [
+      { src: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
+      { src: '/icon-512.svg', sizes: '512x512', type: 'image/svg+xml' },
+    ],
+  };
 });
 
-app.listen({ host: '0.0.0.0', port: PORT }, (err, addr) => {
+app.listen({ port: Number(PORT), host: '0.0.0.0' }, (err) => {
   if (err) { console.error(err); process.exit(1); }
-  console.log(`[demo] MerchantOS running at ${addr}`);
-  console.log(`[demo] Open http://localhost:${PORT}/app to see the UI`);
+  console.log(`MerchantOS demo server listening on http://localhost:${PORT}`);
 });

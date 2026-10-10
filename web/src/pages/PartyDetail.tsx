@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeft, Plus, Minus, Phone, MessageCircle, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card, CardBody, Button, Avatar, Badge, Input, EmptyState, Skeleton } from '@/lib/ui';
@@ -9,7 +9,7 @@ import { useState } from 'react';
 type Entry = { id: string; type: 'UDHAR' | 'PAASA'; amount: number; note?: string; createdAt: string };
 
 export function PartyDetailPage() {
-  const id = (window.location.pathname.split('/').pop()) || '';
+  const { partyId: id } = useParams({ strict: false }) as { partyId: string };
   const qc = useQueryClient();
   const nav = useNavigate();
   const party = useQuery({ queryKey: ['party', id], queryFn: () => api.get<{ id: string; name: string; phone?: string; balance: number }>(`/api/customer/${id}`) });
@@ -18,9 +18,14 @@ export function PartyDetailPage() {
   const [note, setNote] = useState('');
 
   const add = useMutation({
-    mutationFn: (type: 'UDHAR' | 'PAASA') => api.post(`/api/customer/${id}/ledger`, {
-      type, amount: parseFloat(amount), note: note || undefined,
-    }),
+    mutationFn: (type: 'UDHAR' | 'PAASA') => {
+      const map: Record<string, string> = { UDHAR: 'CREDIT', PAASA: 'PAYMENT' };
+      return api.post(`/api/customer/${id}/ledger`, {
+        type: map[type] || type,
+        amount: parseFloat(amount),
+        note: note || undefined,
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ledger', id] });
       qc.invalidateQueries({ queryKey: ['party', id] });

@@ -5,6 +5,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import './index.css';
 import { router } from './router';
+import { ToastContainer } from './lib/toast';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <Tooltip.Provider delayDuration={200}>
         <RouterProvider router={router} />
+        <ToastContainer />
       </Tooltip.Provider>
     </QueryClientProvider>
   </StrictMode>,
