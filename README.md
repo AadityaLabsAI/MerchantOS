@@ -217,6 +217,7 @@ bin/
 
 ## Documentation
 
+- [FEATURES.md](FEATURES.md) — **what it does for you** (user-facing overview)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system shape and request lifecycle
 - [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — every table, every column
 - [docs/API.md](docs/API.md) — full HTTP API reference
