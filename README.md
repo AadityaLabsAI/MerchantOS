@@ -215,6 +215,19 @@ bin/
 - [ ] (Optional) Mount a cron to run `./bin/migrate` daily
 - [ ] (Optional) Set up Ollama on the host and enable `AI_ENABLED=true`
 
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system shape and request lifecycle
+- [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — every table, every column
+- [docs/API.md](docs/API.md) — full HTTP API reference
+- [docs/SECURITY.md](docs/SECURITY.md) — security controls and operational guidance
+- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) — STRIDE threat model
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — step-by-step production deploy
+- [docs/TESTING.md](docs/TESTING.md) — how to run and extend the test suite
+- [docs/ROADMAP.md](docs/ROADMAP.md) — what's next and what is out of scope
+- [docs/MONETIZATION.md](docs/MONETIZATION.md) — license, funding, what is and isn't free
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — how to contribute a change
+
 ## License
 
 MIT. Use commercially. Modify. Ship.
