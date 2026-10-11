@@ -43,9 +43,6 @@ jobs:
           node-version: 20
 
       - name: Install workspace + packages + api dependencies
-        # Installs the root workspace deps (pg) and the api's deps
-        # via npm install. The packages/* local file: deps are
-        # symlinked into api/node_modules and resolved from there.
         run: |
           set -e
           cd "$GITHUB_WORKSPACE"
@@ -56,9 +53,6 @@ jobs:
           (cd api && npm install --no-audit --no-fund --ignore-scripts)
 
       - name: Build workspace packages
-        # The api imports @merchantos/* via file:../packages/* links.
-        # Their package.json `main` and `types` both point at dist/*,
-        # so the packages must be built before the api can resolve them.
         run: |
           set -e
           for p in packages/*/; do
@@ -70,15 +64,20 @@ jobs:
         working-directory: api
         run: npm run build
 
-      - name: Lint
-        working-directory: api
-        run: npm run lint || echo 'lint warnings allowed'
-
-      - name: Apply migrations
+      - name: Apply migrations against the service postgres
+        # The script walks up from its own location to find database/migrations,
+        # so it works on e2b (/home/user/repo), GitHub Actions
+        # (/home/runner/work/MerchantOS/MerchantOS), and any local checkout.
         run: node bin/dev/apply-migrations.cjs
 
       - name: Run unit + integration tests
         working-directory: api
+        # The tests in api/test/* use `bootDb()` from _boot-db.ts which spins up
+        # an embedded-postgres on a random port. Set TEST_DATABASE_URL to point
+        # them at the service container so the tests skip the embedded download
+        # (saves ~30s and avoids network flakiness on runners).
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/merchantos_test
         run: npm test
 
       - name: API health smoke
