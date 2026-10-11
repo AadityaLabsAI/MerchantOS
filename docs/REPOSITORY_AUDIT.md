@@ -212,7 +212,7 @@ Each entry is classified as `working`, `partial`, `stub`, `broken`, `missing`, o
 
 P0 (block release):
 
-- **No rate limit on auth endpoints.** A simple script can brute-force a weak seed password. Recommended: a sliding-window per-IP+per-account limiter on `/auth/login`, `/auth/register`, `/auth/refresh`. Until then, do not expose the api to the public internet.
+- *(Resolved — the rate-limit middleware was already in `packages/security/src` and in use in the auth controller.)*
 - **No Android client.** The product mission explicitly requires a phone-first experience. The web SPA is functional but a merchant doing billing on a 6" phone via the web is not the target UX.
 
 P1 (block production launch but not CI green):
@@ -268,7 +268,7 @@ All pass on the current branch.
 
 ## 9. Ordered backlog
 
-1. Add rate limiting on auth endpoints (P0).
+1. ~~Add rate limiting on auth endpoints (P0)~~ — already in place. Replaced by P0 #2 below.
 2. Build the Android Kotlin app (P0; biggest single effort).
 3. Build the statement importer + reconciliation (P1).
 4. Build the refunds API (P1).
