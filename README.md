@@ -227,6 +227,15 @@ bin/
 - [docs/ROADMAP.md](docs/ROADMAP.md) — what's next and what is out of scope
 - [docs/MONETIZATION.md](docs/MONETIZATION.md) — license, funding, what is and isn't free
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — how to contribute a change
+- [docs/SELF_HOSTED_PAYMENTS_AND_REGULATORY_GATES.md](docs/SELF_HOSTED_PAYMENTS_AND_REGULATORY_GATES.md) — payment boundary and the regulatory reality
+- [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) — backup format, restore procedure, restore drill
+- [docs/DATA_IMPORT_EXPORT.md](docs/DATA_IMPORT_EXPORT.md) — two-phase import (preview + commit), CSV format, rollback
+- [docs/PRIVACY.md](docs/PRIVACY.md) — self-hosted-first privacy policy
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — Contributor Covenant v2.1
+- [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) — user journeys and acceptance criteria
+- [docs/REPOSITORY_AUDIT.md](docs/REPOSITORY_AUDIT.md) — what actually exists in the code, and the gaps
+- [SECURITY.md](SECURITY.md) — security disclosure policy (private advisory, not public issue)
+- [NOTICE](NOTICE) — third-party licenses and trademarks
 
 ## License
 
