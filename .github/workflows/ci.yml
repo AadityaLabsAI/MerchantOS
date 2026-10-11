@@ -26,8 +26,9 @@ jobs:
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/merchantos_test
-      JWT_SECRET: test-jwt-secret-do-not-use-in-prod
-      PAYMENT_WEBHOOK_SECRET: test-webhook-secret
+      JWT_ACCESS_SECRET: test-jwt-access-secret-32-chars-min-aaaaa
+      JWT_REFRESH_SECRET: test-jwt-refresh-secret-32-chars-min-bbbbb
+      WEBHOOK_HMAC_SECRET: test-webhook-hmac-secret-32-chars-min-ccc
       API_BASE_URL: http://127.0.0.1:3000
       ENABLE_PAYMENT_SIMULATOR: 'true'
       ALLOW_SEED: 'true'
