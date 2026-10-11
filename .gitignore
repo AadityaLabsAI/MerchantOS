@@ -34,3 +34,8 @@ e2b_sandbox_id.txt
 .env
 .env.*
 !.env.example
+
+# Local backup files (regenerate with bin/backup.cjs)
+**/backups/*.dump
+**/backups/*.sql
+api/backups/
