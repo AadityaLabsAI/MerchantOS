@@ -83,7 +83,11 @@ jobs:
       - name: API health smoke
         working-directory: api
         run: |
-          set -a; source .env.test 2>/dev/null; source .env.development 2>/dev/null; set +a
+          # Load test env if it exists; tolerate absence (don't abort under set -e).
+          for f in .env.test .env.development; do
+            [ -f "$f" ] || continue
+            set -a; . "$f"; set +a
+          done
           node dist/main.js &
           PID=$!
           for i in 1 2 3 4 5 6 7 8 9 10; do
