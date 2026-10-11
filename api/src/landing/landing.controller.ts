@@ -149,15 +149,13 @@ self.addEventListener('fetch', (e) => {
   // Only routes that DON'T start with /api, /auth, /pay (which are real API routes) fall back.
   @Public()
   @Get('*')
-  spa(@Req() req: Request, @Res() res: Response) {
+  // Uses the Fastify reply API (Nest runs on FastifyAdapter, not Express).
+  spa(@Req() req: Request, @Res({ passthrough: false }) reply: any) {
     const url = req.url || '/';
     const path = url.split('?')[0];
-    // Known asset roots we serve directly
     const ext = extname(path);
     if (ext && MIME[ext]) {
-      // serve from dist if it exists
       const filename = path.startsWith('/') ? path.slice(1) : path;
-      // search for the asset in the landing dir
       const candidates = [
         join(process.cwd(), 'api', 'src', 'landing', filename),
         join(process.cwd(), 'src', 'landing', filename),
@@ -167,16 +165,15 @@ self.addEventListener('fetch', (e) => {
       for (const p of candidates) {
         if (existsSync(p) && statSync(p).isFile()) {
           const buf = readFileBuffer(filename);
-          res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
-          res.setHeader('Cache-Control', 'public, max-age=2592000');
-          res.send(buf);
+          reply.header('Content-Type', MIME[ext] || 'application/octet-stream');
+          reply.header('Cache-Control', 'public, max-age=2592000');
+          reply.send(buf);
           return;
         }
       }
     }
-    // Otherwise return the SPA shell so the React Router can handle it client-side
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.send(INDEX_HTML);
+    reply.header('Content-Type', 'text/html; charset=utf-8');
+    reply.header('Cache-Control', 'no-cache');
+    reply.send(INDEX_HTML);
   }
 }
