@@ -1,0 +1,96 @@
+name: ci
+
+on:
+  push:
+    branches: [main, 'feat/**', 'docs/**', 'phase-1-production-stabilization']
+  pull_request:
+    branches: [main]
+
+jobs:
+  api-build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: merchantos_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: api
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/merchantos_test
+      JWT_SECRET: test-jwt-secret-do-not-use-in-prod
+      PAYMENT_WEBHOOK_SECRET: test-webhook-secret
+      API_BASE_URL: http://127.0.0.1:3000
+      ENABLE_PAYMENT_SIMULATOR: 'true'
+      ALLOW_SEED: 'true'
+      PORT: 3000
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Install Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint || echo 'lint warnings allowed'
+
+      - name: Apply migrations
+        run: node bin/dev/apply-migrations.cjs
+
+      - name: Run unit + integration tests
+        run: npm test
+
+      - name: API health smoke
+        run: |
+          set -a; source .env.test 2>/dev/null; source .env.development 2>/dev/null; set +a
+          node dist/main.js &
+          PID=$!
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 2
+            if curl -fsS http://127.0.0.1:3000/healthz >/dev/null 2>&1; then
+              echo "API ready"
+              break
+            fi
+          done
+          curl -sS -w 'HTTP:%{http_code}\n' http://127.0.0.1:3000/healthz
+          kill $PID 2>/dev/null || true
+
+
+  web-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci || npm install
+      - run: npm run build

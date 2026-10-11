@@ -1,15 +1,14 @@
-
 const { Client } = require('pg');
 const { readFileSync, readdirSync } = require('node:fs');
-const { join, resolve } = require('node:path');
+const { join } = require('node:path');
 
 const REPO_ROOT = '/home/user/repo';
 const MIGRATIONS_DIR = join(REPO_ROOT, 'database', 'migrations');
 
 (async () => {
-  const client = new Client({ connectionString: 'postgres://merchantos:merchantos@127.0.0.1:5432/merchantos' });
+  const url = process.env.DATABASE_URL || 'postgresql://merchantos:merchantos@127.0.0.1:5432/merchantos';
+  const client = new Client({ connectionString: url });
   await client.connect();
-  // bootstrap
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version text PRIMARY KEY,
