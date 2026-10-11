@@ -11,7 +11,8 @@ import { CustomerController } from './customer/customer.controller.js';
 import { ExpenseController } from './expense/expense.controller.js';
 import { SupplierController } from './supplier/supplier.controller.js';
 import { ShiftController } from './shift/shift.controller.js';
-import { ReportsController } from './reports/reports.controller.js';\nimport { AuditController } from './audit/audit.controller.js';
+import { ReportsController } from './reports/reports.controller.js';
+import { AuditController } from './audit/audit.controller.js';
 import { PaymentModule } from './payment/payment.controller.js';
 import { AssistantController } from './ai/assistant.controller.js';
 import { AuthGuard } from './auth/auth.guard.js';
@@ -34,6 +35,7 @@ import { IdempotencyStoreInterceptor } from './middleware/idempotency.intercepto
     ShiftController,
     AssistantController,
     ReportsController,
+    AuditController,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: RequestLoggerInterceptor },
