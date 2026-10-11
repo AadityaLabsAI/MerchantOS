@@ -77,8 +77,9 @@ export class BillController {
         const unitMoney = moneyFromMinor(currency, unitPrice);
         const lineMoney = unitMoney.times(BigInt(line.quantity));
         subtotal = subtotal.plus(lineMoney);
-        // Per-line tax: use the product's tax_bps, falling back to the bill-level taxBps.
-        const lineTaxBps = prod.rows[0].tax_bps ?? p.taxBps;
+        // Per-line tax: use the bill-level taxBps if explicitly > 0; otherwise the product's tax_bps.
+        // The product's tax_bps is treated as a per-product override; the bill-level rate is the default.
+        const lineTaxBps = (p.taxBps && p.taxBps > 0) ? p.taxBps : (prod.rows[0].tax_bps || 0);
         // Compute tax as (line_subtotal * bps / 10000), truncated to nearest minor unit.
         const lineTaxMinor = (lineMoney.minor * BigInt(lineTaxBps)) / 10000n;
         const lineTaxMoney = moneyFromMinor(currency, lineTaxMinor);
@@ -174,7 +175,8 @@ export class BillController {
           `UPDATE customers SET balance_minor = (balance_minor)::bigint + $1::bigint, updated_at = now() WHERE id = $2`,
           [totalNegative, bill.rows[0].customer_id]);
       }
-      await c.query(`UPDATE bills SET state = 'CANCELLED', updated_at = now() WHERE id = $1`, [id]);
+      // Defense-in-depth: include merchant_id even though the SELECT just verified it.
+      await c.query(`UPDATE bills SET state = 'CANCELLED', updated_at = now() WHERE id = $1 AND merchant_id = $2`, [id, req.auth.merchantId]);
     });
     await this.audit.write({ merchantId: req.auth.merchantId, actorUserId: req.auth.userId,
       action: 'bill.cancel', targetType: 'bill', targetId: id, requestId: req.id, ip: req.ip });

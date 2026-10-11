@@ -97,8 +97,9 @@ export class AssistantController {
         throw new HttpException({ code: 'CONVERSATION_FORBIDDEN', message: 'conversation does not belong to this user/store' }, 403);
       }
     }
-    await query(`INSERT INTO ai_messages (id, conversation_id, role, content) VALUES ($1, $2, 'user', $3)`,
-      [ulid(), conversationId, p.message]);
+    // Defense-in-depth: include merchant_id even though the conversation was verified above.
+    await query(`INSERT INTO ai_messages (id, conversation_id, merchant_id, role, content) VALUES ($1, $2, $3, 'user', $4)`,
+      [ulid(), conversationId, req.auth.merchantId, p.message]);
 
     const context = await fetchContext(req.auth.merchantId, p.storeId);
     const system = `You are MerchantOS Copilot. You give concise, business-focused answers to shop owners.
@@ -106,9 +107,9 @@ Use only the data in the <context> block. If you do not know, say so.
 Answer in plain text, keep under 150 words, use INR with ₹ symbol.
 <context>${escapeForContext(context)}</context>`;
     const result = await callOllama(p.message, system);
-    await query(`INSERT INTO ai_messages (id, conversation_id, role, content, prompt_tokens, completion_tokens) VALUES ($1, $2, 'assistant', $3, $4, $5)`,
-      [ulid(), conversationId, result.content, result.promptTokens, result.completionTokens]);
-    await query(`UPDATE ai_conversations SET updated_at = now() WHERE id = $1`, [conversationId]);
+    await query(`INSERT INTO ai_messages (id, conversation_id, merchant_id, role, content, prompt_tokens, completion_tokens) VALUES ($1, $2, $3, 'assistant', $4, $5, $6)`,
+      [ulid(), conversationId, req.auth.merchantId, result.content, result.promptTokens, result.completionTokens]);
+    await query(`UPDATE ai_conversations SET updated_at = now() WHERE id = $1 AND merchant_id = $2`, [conversationId, req.auth.merchantId]);
     return { conversationId, message: result.content, tokens: { prompt: result.promptTokens, completion: result.completionTokens } };
   }
 
