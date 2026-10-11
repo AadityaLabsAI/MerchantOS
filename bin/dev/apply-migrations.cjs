@@ -1,8 +1,18 @@
 const { Client } = require('pg');
 const { readFileSync, readdirSync } = require('node:fs');
-const { join } = require('node:path');
+const { join, resolve } = require('node:path');
 
-const REPO_ROOT = '/home/user/repo';
+// Walk up from this script's location to find the repo root (the directory
+// that contains `database/migrations`). Works in any environment:
+//   - /home/user/repo/bin/dev/apply-migrations.cjs        (e2b sandbox)
+//   - /home/runner/work/MerchantOS/MerchantOS/bin/dev/... (GitHub Actions)
+//   - /Users/foo/projects/merchantos/bin/dev/...          (local dev)
+const SCRIPT_DIR = __dirname;
+let REPO_ROOT = SCRIPT_DIR;
+for (let i = 0; i < 6; i++) {
+  if (readdirSync(REPO_ROOT).includes('database')) break;
+  REPO_ROOT = resolve(REPO_ROOT, '..');
+}
 const MIGRATIONS_DIR = join(REPO_ROOT, 'database', 'migrations');
 
 (async () => {
@@ -17,6 +27,7 @@ const MIGRATIONS_DIR = join(REPO_ROOT, 'database', 'migrations');
     );
   `);
   const files = readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql')).sort();
+  console.log('[migrations] dir: ' + MIGRATIONS_DIR + ' (' + files.length + ' files)');
   for (const f of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, f), 'utf-8');
     try {
