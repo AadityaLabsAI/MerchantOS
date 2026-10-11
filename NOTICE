@@ -1,0 +1,76 @@
+# Third-Party Notices
+
+MerchantOS is built on the following open-source components. This list covers
+production-bundled runtime dependencies. Dev-only dependencies are excluded.
+
+## Backend runtime
+
+- **NestJS 10** — MIT — https://github.com/nestjs/nest
+  Copyright (c) 2017-present Kamil Myśliwiec
+- **@nestjs/core, @nestjs/common, @nestjs/platform-fastify, @nestjs/jwt, @nestjs/config** — MIT (same as NestJS)
+- **Fastify 4** — MIT — https://github.com/fastify/fastify
+  Copyright (c) 2016-present Matteo Collina and the Fastify contributors
+- **pg (node-postgres)** — MIT — https://github.com/brianc/node-postgres
+  Copyright (c) 2010-2020 Brian Carlson
+- **embedded-postgres** — Apache-2.0 — https://github.com/leinelissen/embedded-postgres
+  Copyright (c) 2020 Leine Lissen
+- **zod** — MIT — https://github.com/colinhacks/zod
+  Copyright (c) 2020 Colin McDonnell
+- **nanoid** — MIT — https://github.com/ai/nanoid
+  Copyright (c) 2017 Andrey Sitnik
+- **reflect-metadata** — Apache-2.0
+- **rxjs** — Apache-2.0
+- **qrcode** — MIT — https://github.com/soldair/node-qrcode
+  Copyright (c) 2012 Ryan Day
+- **express** (types only) — MIT
+
+## Build / dev
+
+- **TypeScript 5** — Apache-2.0
+- **tsx** — MIT
+- **@types/node** — MIT
+
+## Database
+
+- **PostgreSQL 15** — PostgreSQL License — https://www.postgresql.org/about/licence/
+  Portions Copyright (c) 1996-2024, The PostgreSQL Global Development Group
+  Portions Copyright (c) 1994, The Regents of the University of California
+
+## Workspace packages
+
+All packages under `packages/` are part of MerchantOS and licensed under the
+project MIT license (see `LICENSE`).
+
+- `@merchantos/crypto` — built on `node:crypto` (Node.js standard library, MIT)
+- `@merchantos/money` — pure-TS, no external deps
+- `@merchantos/payments` — payment-state machine, provider-neutral
+- `@merchantos/qr` — built on `qrcode` (MIT)
+- `@merchantos/security` — HMAC, scrypt wrappers via `node:crypto`
+- `@merchantos/shared-types` — pure-TS
+- `@merchantos/sync` — sync protocol
+- `@merchantos/validation` — built on `zod` (MIT)
+
+## Fonts and assets (web)
+
+- Bundled SPA uses system fonts; no third-party font is shipped in the bundle.
+- `icon.svg` (in `api/src/landing/`) is original work, MIT.
+
+## Generated or copied code
+
+- No generated or copied code is shipped in the runtime bundle that would carry
+  a different license obligation. All third-party code is consumed as npm
+  dependencies with their licenses preserved in the lockfile.
+
+## Trademarks
+
+- "MerchantOS" is a project name, not a registered trademark.
+- "NPCI", "UPI", "RBI" and "PSS Act" are referenced for regulatory context only;
+  they remain the property of their respective owners.
+- "PhonePe", "Razorpay", "Cashfree", "Stripe" are referenced as examples of
+  commercial PSPs that MerchantOS does not depend on; they remain the property
+  of their respective owners.
+
+## License
+
+MerchantOS source code is released under the MIT License — see `LICENSE` for
+the full text.
