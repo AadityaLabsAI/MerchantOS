@@ -50,16 +50,14 @@ const Schema = z.object({
   // AI request timeout in seconds — protects against Ollama hanging.
   AI_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(20),
 
-  // Rate limiting (per-IP and per-account) on auth endpoints. Defends against
-  // credential stuffing and brute-force on a small server without a separate
-  // WAF. Disabled only in test environments; defaults are conservative.
-  RATE_LIMIT_ENABLED: z.preprocess(
-    (v) => v === undefined ? true : (typeof v === 'string' ? v.toLowerCase() !== 'false' && v !== '0' : v),
+  // Rate-limit thresholds for auth endpoints. The implementation lives in
+  // packages/security/src and is invoked from api/src/auth/auth.controller.ts.
+  // RATE_LIMIT_DISABLED=true is the only documented way to turn the limiter
+  // off (intended for tests and local-only development).
+  RATE_LIMIT_DISABLED: z.preprocess(
+    (v) => v === undefined ? false : (typeof v === 'string' ? v.toLowerCase() === 'true' || v === '1' : v),
     z.boolean()
-  ).default(true),
-  RATE_LIMIT_AUTH_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
-  RATE_LIMIT_AUTH_MAX_REQUESTS: z.coerce.number().int().positive().default(10),
-  RATE_LIMIT_REGISTER_MAX_REQUESTS: z.coerce.number().int().positive().default(3),
+  ).default(false),
 });
 
 export type AppConfig = z.infer<typeof Schema>;
