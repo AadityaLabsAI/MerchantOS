@@ -81,6 +81,7 @@ jobs:
         run: npm test
 
       - name: API health smoke
+        working-directory: api
         run: |
           set -a; source .env.test 2>/dev/null; source .env.development 2>/dev/null; set +a
           node dist/main.js &
