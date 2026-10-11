@@ -1,8 +1,8 @@
-// Top-level Nest module. PaymentModule owns PaymentController/PayPage/Webhook/DevSimulate.
+// Top-level Nest module.
 import { Module } from '@nestjs/common';
-import { LandingController } from './landing/landing.controller.js';
 import { APP_INTERCEPTOR, APP_FILTER, Reflector } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
+import { LandingController } from './landing/landing.controller.js';
 import { AuthController } from './auth/auth.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { ProductController } from './product/product.controller.js';
@@ -19,10 +19,11 @@ import { PermissionsGuard } from './rbac/rbac.guard.js';
 import { GlobalErrorFilter } from './observability/global-error.filter.js';
 import { RequestLoggerInterceptor } from './observability/request-logger.interceptor.js';
 import { JwtService } from '@nestjs/jwt';
+import { IdempotencyStoreInterceptor } from './middleware/idempotency.interceptor.js';
 
 @Module({
   imports: [JwtModule.register({ global: true }), PaymentModule],
-  controllers: [LandingController, 
+  controllers: [LandingController,
     AuthController,
     HealthController,
     ProductController,
@@ -36,6 +37,7 @@ import { JwtService } from '@nestjs/jwt';
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: RequestLoggerInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyStoreInterceptor },
     { provide: APP_FILTER, useClass: GlobalErrorFilter },
   ],
 })

@@ -61,6 +61,8 @@ async function bootstrap() {
   const jwt = app.get(JwtService);
   app.useGlobalGuards(buildAuthGuard(reflector, jwt), buildPermissionsGuard(reflector));
 
+  // Idempotency: handled by Nest middleware in AppModule.configure.
+
   const origins = cfg.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
   app.enableCors({
     origin: origins.length ? origins : false,

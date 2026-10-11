@@ -3,7 +3,7 @@ const { Client } = require('pg');
 const { readFileSync, readdirSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 
-const REPO_ROOT = resolve(__dirname, '..');
+const REPO_ROOT = '/home/user/repo';
 const MIGRATIONS_DIR = join(REPO_ROOT, 'database', 'migrations');
 
 (async () => {
