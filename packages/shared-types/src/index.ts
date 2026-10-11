@@ -33,7 +33,7 @@ export const PERMISSIONS = {
   STAFF_MANAGE: 'staff:manage',
   SETTINGS_EDIT: 'settings:edit',
   DEVICES_MANAGE: 'devices:manage',
-  ASSISTANT_USE: 'assistant:use',
+  ASSISTANT_USE: 'assistant:use',\n  AUDIT_VIEW: 'audit:view',
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];

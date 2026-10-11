@@ -2,7 +2,7 @@
 // Serves the Vite/esbuild-built React SPA from the landing directory.
 // All unknown non-API routes fall back to index.html for client-side routing.
 import { Controller, Get, Header, Req, Res, NotFoundException } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import { readFileSync, statSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { Public } from '../auth/auth.guard.js';
