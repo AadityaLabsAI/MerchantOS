@@ -1,0 +1,12 @@
+# nixpacks.toml — disable Nixpacks/Railpack auto-detection for this repo.
+# Railway defaults to Railpack when no Dockerfile/Config is found. The
+# presence of this file forces Railway to either respect the Dockerfile
+# (set via railway.toml/railway.json) or fail loudly instead of building
+# with the wrong toolchain.
+#
+# The MerchantOS build needs to compile the api/ TypeScript via tsc and
+# bundle 8 workspace packages, all of which the root Dockerfile.railway
+# does in one pass. Nixpacks/Railpack cannot reproduce that today.
+
+[start]
+cmd = "/app/entrypoint.sh"
