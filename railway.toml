@@ -1,0 +1,28 @@
+# railway.toml — single-service config for the MerchantOS API + web SPA.
+# This file is read by Railway's "Config as Code" feature during deploys.
+# It overrides dashboard values for THIS service only.
+# (Config as Code is being superseded by .railway/railway.ts; see
+# docs/DEPLOY_RAILWAY.md#future-proof for the IaC equivalent if Railway
+# rejects this file on a future service.)
+
+[build]
+# Force Docker builds. The repo's Dockerfile is multi-stage and handles
+# packages, api and the embedded web SPA in one image.
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Railway injects $PORT; the API listens on it via config.ts.
+startCommand = "/app/entrypoint.sh"
+
+# Migration runs on every deploy. The script is idempotent: it tracks applied
+# versions in schema_migrations and skips already-applied ones.
+preDeployCommand = ["./bin/migrate"]
+
+# Healthcheck path matches the API's /healthz endpoint.
+healthcheckPath = "/healthz"
+healthcheckTimeout = 100
+
+# Restart policy: let Railway handle crashes.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
