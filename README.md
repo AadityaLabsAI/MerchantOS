@@ -4,6 +4,14 @@
 
 Zero third-party APIs. Zero SaaS. Runs on a single Linux box with PostgreSQL.
 
+## 🚀 One-click deploy
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/merchantos?referralCode=)
+
+Click the button, leave the variables page empty, hit **Deploy**. In ~3 minutes you have a live MerchantOS at a `*.up.railway.app` URL. The first deploy log prints the auto-generated OWNER password once. [Full Railway guide →](docs/DEPLOY_RAILWAY.md)
+
+Prefer a VPS or your own server? See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the bare-metal 60-minute path.
+
 ## Security posture (1.1.0+)
 
 - Store membership enforcement on every controller (OWNER bypasses, others must be a member).

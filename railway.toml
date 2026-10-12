@@ -1,0 +1,30 @@
+# railway.toml — single-service config for the MerchantOS API + web SPA.
+# This file is read by Railway's "Config as Code" feature during deploys.
+# It overrides dashboard values for THIS service only.
+# (Config as Code is being superseded by .railway/railway.ts; see
+# docs/DEPLOY_RAILWAY.md#future-proof for the IaC equivalent if Railway
+# rejects this file on a future service.)
+
+[build]
+# Force Docker builds. Dockerfile.railway is the same as the root
+# Dockerfile but uses docker/railway-entrypoint.sh, which auto-generates
+# any missing JWT/WEBHOOK secrets on first boot. The user can do a true
+# one-click deploy with only DATABASE_URL set.
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.railway"
+
+[deploy]
+# railway-entrypoint.sh internally waits for Postgres, runs migrations,
+# seeds the demo catalog, creates the OWNER user, and starts the API.
+startCommand = "/app/entrypoint.sh"
+
+# Idempotent. Skips already-applied migrations.
+preDeployCommand = ["./bin/migrate"]
+
+# /healthz is the API's liveness probe.
+healthcheckPath = "/healthz"
+healthcheckTimeout = 100
+
+# On-failure restart, max 5 attempts.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
