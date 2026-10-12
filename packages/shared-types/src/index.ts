@@ -34,6 +34,7 @@ export const PERMISSIONS = {
   SETTINGS_EDIT: 'settings:edit',
   DEVICES_MANAGE: 'devices:manage',
   ASSISTANT_USE: 'assistant:use',
+  AUDIT_VIEW: 'audit:view',
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];

@@ -76,7 +76,7 @@ export class AuthController {
     await query(
       `INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES ($1, $2, now() + ($3::bigint * interval '1 millisecond'))`,
       [jti, u.id, ttlToMs(cfg.JWT_REFRESH_TTL)]);
-    await query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [u.id]);
+    await query(`UPDATE users SET last_login_at = now() WHERE id = $1 AND merchant_id = $2`, [u.id, u.merchant_id]);
     await this.audit.write({
       merchantId: u.merchant_id, storeId: effectiveStore, actorUserId: u.id,
       action: 'auth.login', targetType: 'user', targetId: u.id,

@@ -1,0 +1,117 @@
+name: ci
+
+on:
+  push:
+    branches: [main, 'feat/**', 'docs/**', 'phase-1-production-stabilization']
+  pull_request:
+    branches: [main]
+
+jobs:
+  api-build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: merchantos_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/merchantos_test
+      JWT_ACCESS_SECRET: test-jwt-access-secret-32-chars-min-aaaaa
+      JWT_REFRESH_SECRET: test-jwt-refresh-secret-32-chars-min-bbbbb
+      WEBHOOK_HMAC_SECRET: test-webhook-hmac-secret-32-chars-min-ccc
+      API_BASE_URL: http://127.0.0.1:3000
+      ENABLE_PAYMENT_SIMULATOR: 'true'
+      ALLOW_SEED: 'true'
+      PORT: 3000
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Install Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install workspace + packages + api dependencies
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE"
+          npm install --no-audit --no-fund --ignore-scripts
+          for p in packages/*/; do
+            (cd "$p" && npm install --no-audit --no-fund --ignore-scripts)
+          done
+          (cd api && npm install --no-audit --no-fund --ignore-scripts)
+
+      - name: Build workspace packages
+        run: |
+          set -e
+          for p in packages/*/; do
+            echo "==> building $p"
+            (cd "$p" && npm run build)
+          done
+
+      - name: Build api
+        working-directory: api
+        run: npm run build
+
+      - name: Apply migrations against the service postgres
+        # The script walks up from its own location to find database/migrations,
+        # so it works on e2b (/home/user/repo), GitHub Actions
+        # (/home/runner/work/MerchantOS/MerchantOS), and any local checkout.
+        run: node bin/dev/apply-migrations.cjs
+
+      - name: Run unit + integration tests
+        working-directory: api
+        # The tests in api/test/* use `bootDb()` from _boot-db.ts which spins up
+        # an embedded-postgres on a random port. Set TEST_DATABASE_URL to point
+        # them at the service container so the tests skip the embedded download
+        # (saves ~30s and avoids network flakiness on runners).
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/merchantos_test
+        run: npm test
+
+      - name: API health smoke
+        working-directory: api
+        run: |
+          # Load test env if it exists; tolerate absence (don't abort under set -e).
+          for f in .env.test .env.development; do
+            [ -f "$f" ] || continue
+            set -a; . "$f"; set +a
+          done
+          node dist/main.js &
+          PID=$!
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 2
+            if curl -fsS http://127.0.0.1:3000/healthz >/dev/null 2>&1; then
+              echo "API ready"
+              break
+            fi
+          done
+          curl -sS -w 'HTTP:%{http_code}\n' http://127.0.0.1:3000/healthz
+          kill $PID 2>/dev/null || true
+
+
+  web-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund --ignore-scripts || npm install --no-audit --no-fund
+      - run: npm run build

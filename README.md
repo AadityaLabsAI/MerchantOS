@@ -215,6 +215,28 @@ bin/
 - [ ] (Optional) Mount a cron to run `./bin/migrate` daily
 - [ ] (Optional) Set up Ollama on the host and enable `AI_ENABLED=true`
 
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system shape and request lifecycle
+- [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — every table, every column
+- [docs/API.md](docs/API.md) — full HTTP API reference
+- [docs/SECURITY.md](docs/SECURITY.md) — security controls and operational guidance
+- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) — STRIDE threat model
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — step-by-step production deploy
+- [docs/TESTING.md](docs/TESTING.md) — how to run and extend the test suite
+- [docs/ROADMAP.md](docs/ROADMAP.md) — what's next and what is out of scope
+- [docs/MONETIZATION.md](docs/MONETIZATION.md) — license, funding, what is and isn't free
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — how to contribute a change
+- [docs/SELF_HOSTED_PAYMENTS_AND_REGULATORY_GATES.md](docs/SELF_HOSTED_PAYMENTS_AND_REGULATORY_GATES.md) — payment boundary and the regulatory reality
+- [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) — backup format, restore procedure, restore drill
+- [docs/DATA_IMPORT_EXPORT.md](docs/DATA_IMPORT_EXPORT.md) — two-phase import (preview + commit), CSV format, rollback
+- [docs/PRIVACY.md](docs/PRIVACY.md) — self-hosted-first privacy policy
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — Contributor Covenant v2.1
+- [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) — user journeys and acceptance criteria
+- [docs/REPOSITORY_AUDIT.md](docs/REPOSITORY_AUDIT.md) — what actually exists in the code, and the gaps
+- [SECURITY.md](SECURITY.md) — security disclosure policy (private advisory, not public issue)
+- [NOTICE](NOTICE) — third-party licenses and trademarks
+
 ## License
 
 MIT. Use commercially. Modify. Ship.

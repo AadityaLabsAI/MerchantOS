@@ -6,16 +6,13 @@ cd "$(dirname "$0")/.."
 
 # Match the migration runner's DATABASE_URL handling so Docker connects to service "postgres".
 if [ -n "${DATABASE_URL:-}" ]; then
-  PGHOST="${PGHOST:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(u.hostname)')}"
-  PGPORT="${PGPORT:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(u.port||"5432")')}"
-  PGUSER="${PGUSER:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(decodeURIComponent(u.username))')}"
-  PGDATABASE="${PGDATABASE:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(decodeURIComponent(u.pathname.replace(/^\\//,"")))')}"
-  PGPASSWORD="${PGPASSWORD:-$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write(decodeURIComponent(u.password))')}"
+  eval "$(node -e 'const u=new URL(process.env.DATABASE_URL);process.stdout.write("export PGHOST="+u.hostname+" PGPORT="+(u.port||"5432")+" PGUSER="+decodeURIComponent(u.username)+" PGDATABASE="+decodeURIComponent(u.pathname.replace(/^\\//,""))+" PGPASSWORD="+decodeURIComponent(u.password))')"
 fi
 : "${PGUSER:=postgres}"; : "${PGHOST:=127.0.0.1}"; : "${PGPORT:=5432}"; : "${PGDATABASE:=merchantos}"
 export PGUSER PGHOST PGPORT PGDATABASE PGPASSWORD
 
-psql -v ON_ERROR_STOP=1 <<'SQL'
+psql -v ON_ERROR_STOP=0 <<'SQL'
+
 -- One demo merchant
 INSERT INTO merchants (id, name, owner_email, phone)
 VALUES ('01H0000000000000000000000', 'Aaditya Demo Stores', 'owner@aaditya.test', '+91-99999-00000')

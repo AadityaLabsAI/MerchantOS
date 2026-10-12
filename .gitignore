@@ -29,3 +29,13 @@ coverage/
 # e2b sandbox leftovers
 e2b_sandbox_id.txt
 /tmp/
+
+# Local env files — never commit
+.env
+.env.*
+!.env.example
+
+# Local backup files (regenerate with bin/backup.cjs)
+**/backups/*.dump
+**/backups/*.sql
+api/backups/
