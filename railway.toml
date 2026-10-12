@@ -6,23 +6,25 @@
 # rejects this file on a future service.)
 
 [build]
-# Force Docker builds. The repo's Dockerfile is multi-stage and handles
-# packages, api and the embedded web SPA in one image.
+# Force Docker builds. Dockerfile.railway is the same as the root
+# Dockerfile but uses docker/railway-entrypoint.sh, which auto-generates
+# any missing JWT/WEBHOOK secrets on first boot. The user can do a true
+# one-click deploy with only DATABASE_URL set.
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "Dockerfile.railway"
 
 [deploy]
-# Railway injects $PORT; the API listens on it via config.ts.
+# railway-entrypoint.sh internally waits for Postgres, runs migrations,
+# seeds the demo catalog, creates the OWNER user, and starts the API.
 startCommand = "/app/entrypoint.sh"
 
-# Migration runs on every deploy. The script is idempotent: it tracks applied
-# versions in schema_migrations and skips already-applied ones.
+# Idempotent. Skips already-applied migrations.
 preDeployCommand = ["./bin/migrate"]
 
-# Healthcheck path matches the API's /healthz endpoint.
+# /healthz is the API's liveness probe.
 healthcheckPath = "/healthz"
 healthcheckTimeout = 100
 
-# Restart policy: let Railway handle crashes.
+# On-failure restart, max 5 attempts.
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
