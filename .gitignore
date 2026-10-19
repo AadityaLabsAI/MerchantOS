@@ -39,3 +39,4 @@ e2b_sandbox_id.txt
 **/backups/*.dump
 **/backups/*.sql
 api/backups/
+.ideavo/project
