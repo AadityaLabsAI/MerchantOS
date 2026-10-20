@@ -9,6 +9,11 @@ export async function qrSvg(text: string): Promise<string> {
   return QRCode.toString(text, { type: 'svg', errorCorrectionLevel: 'M', margin: 1 });
 }
 
+/** Structural validation only; a valid-looking VPA must still be verified with the merchant's PSP/bank. */
+export function isValidUpiVpa(vpa: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}@[A-Za-z][A-Za-z0-9.-]{0,63}$/.test(vpa.trim());
+}
+
 /**
  * Build a local UPI intent payload. This starts a payment in the customer's UPI
  * app; it is not proof of settlement. The backend must verify settlement before
@@ -22,7 +27,7 @@ export function upiString(opts: { vpa: string; payeeName: string; amountMinor: s
   // UPI Virtual Payment Addresses are usually "handle@provider". A phone number
   // alone cannot be treated as a generic VPA; configure the exact VPA shown by
   // the merchant's bank/UPI app.
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}@[A-Za-z][A-Za-z0-9.-]{0,63}$/.test(vpa)) {
+  if (!isValidUpiVpa(vpa)) {
     throw new Error('Invalid UPI VPA / UPI ID');
   }
   if (!payeeName || payeeName.length > 80 || /[\\u0000-\\u001f\\u007f]/.test(payeeName)) {
