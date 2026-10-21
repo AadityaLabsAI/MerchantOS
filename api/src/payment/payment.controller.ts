@@ -1,5 +1,5 @@
 // Payment endpoints: session create, public pay page, webhook receiver.
-import { Body, Controller, Get, Header, Module, Param, Post, Query, Req, Res, HttpException, BadRequestException, HttpCode, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Module, Param, Post, Put, Query, Req, Res, HttpException, BadRequestException, HttpCode, UseGuards } from '@nestjs/common';
 import { CreatePaymentSessionInput } from '@merchantos/validation';
 import { z } from 'zod';
 import { PERMISSIONS } from '@merchantos/shared-types';
@@ -9,7 +9,7 @@ import { Permissions, PermissionsGuard } from '../rbac/rbac.guard.js';
 import { assertStoreAccess } from '../rbac/store-access.js';
 import { loadConfig } from '../config/config.js';
 import { PaymentService } from './payment.service.js';
-import { qrPng } from '@merchantos/qr';
+import { isValidUpiVpa, qrPng, upiString } from '@merchantos/qr';
 
 const PaymentWebhookInput = z.object({
   id: z.string().min(1).max(200),
@@ -20,10 +20,48 @@ const PaymentWebhookInput = z.object({
   occurredAt: z.string().datetime(),
 }).strict();
 
+const PaymentSettingsInput = z.object({
+  upiVpa: z.string().trim().min(3).max(300),
+  payeeName: z.string().trim().min(1).max(80),
+  phone: z.string().trim().max(20).nullable().optional(),
+}).strict();
+
 @Controller('api/payments')
 @UseGuards(AuthGuard, PermissionsGuard)
 export class PaymentController {
   constructor(private readonly svc: PaymentService) {}
+
+  @Get('settings')
+  @Permissions(PERMISSIONS.PAYMENTS_VIEW)
+  async getPaymentSettings(@Req() req: any) {
+    const storeId = req.auth.storeId;
+    if (!storeId) throw new BadRequestException('no active store for this user');
+    await assertStoreAccess(req.auth, storeId);
+    const settings = await this.svc.getStorePaymentSettings(req.auth.merchantId, storeId);
+    return settings
+      ? { configured: true, ...settings }
+      : { configured: false, upiVpa: '', payeeName: '', phone: null };
+  }
+
+  @Put('settings')
+  @Permissions(PERMISSIONS.SETTINGS_EDIT)
+  async updatePaymentSettings(@Req() req: any, @Body() body: unknown) {
+    const storeId = req.auth.storeId;
+    if (!storeId) throw new BadRequestException('no active store for this user');
+    await assertStoreAccess(req.auth, storeId);
+    const p = PaymentSettingsInput.parse(body);
+    if (!isValidUpiVpa(p.upiVpa)) {
+      throw new BadRequestException('Enter the exact UPI ID / VPA provided by your bank or UPI app');
+    }
+    const saved = await this.svc.saveStorePaymentSettings({
+      merchantId: req.auth.merchantId,
+      storeId,
+      upiVpa: p.upiVpa,
+      payeeName: p.payeeName,
+      phone: p.phone?.trim() || null,
+    });
+    return { configured: true, ...saved };
+  }
 
   @Public()
   @Get('qr/:token')
@@ -32,12 +70,23 @@ export class PaymentController {
     if (!['CREATED', 'PENDING', 'PROCESSING'].includes(session.state)) {
       throw new HttpException({ code: 'PAYMENT_LINK_INACTIVE', message: 'payment link is no longer active' }, 410);
     }
-    const cfg = loadConfig();
-    const base = cfg.WEB_BASE_URL.replace(/\/$/, '');
-    const url = `${base}/pay/${encodeURIComponent(token)}`;
+    if (session.amount.currency !== 'INR') {
+      throw new HttpException({ code: 'UPI_CURRENCY_UNSUPPORTED', message: 'UPI QR is currently available for INR sessions only' }, 400);
+    }
+    const settings = await this.svc.getStorePaymentSettings(session.merchantId, session.storeId);
+    if (!settings) {
+      throw new HttpException({ code: 'UPI_NOT_CONFIGURED', message: 'merchant has not configured a UPI ID' }, 409);
+    }
+    const payload = upiString({
+      vpa: settings.upiVpa,
+      payeeName: settings.payeeName,
+      amountMinor: session.amount.minor,
+      currency: session.amount.currency,
+      txnRef: session.id,
+    });
     res.header('Content-Type', 'image/png');
     res.header('Cache-Control', 'no-store, max-age=0');
-    return qrPng(url, 300);
+    return qrPng(payload, 300);
   }
 
   @Post('sessions')
@@ -92,13 +141,13 @@ const PAY_HTML = `<!doctype html>
 </head>
 <body>
 <div class="card">
-  <div class="brand">💼 MerchantOS · SANDBOX DEMO</div>
+  <div class="brand">MerchantOS · UPI PAYMENT REQUEST</div>
   <div id="statePill" class="state pending">Loading...</div>
   <div class="amt" id="amt">—</div>
-  <div class="desc" id="desc"></div>
+  <div class="desc" id="desc"></div>\n  <div id="receiver" class="desc"></div>\n  <div id="vpa" class="desc"></div>\n  <img id="qr" alt="UPI payment QR code" style="display:none;width:240px;height:240px;max-width:100%;margin:0 auto 20px;background:#fff;padding:8px;border-radius:12px">
   <button id="btn" disabled>Pay now</button>
   <div class="info" id="info"></div>
-  <div class="secure">DEMO ONLY · No real payment is collected</div>
+  <div class="secure" id="securityNote">UPI intent only · confirm the credit in your bank/UPI account before marking a bill paid.</div>
 </div>
 <script>
 const token = location.pathname.split('/').pop();
@@ -108,20 +157,28 @@ async function load() {
     const r = await fetch('/pay/' + token, { headers: { 'Accept': 'application/json' }});
     if (!r.ok) { document.getElementById('statePill').className = 'state failed'; document.getElementById('statePill').textContent = 'Not found'; return; }
     const p = await r.json();
-    const minor = Number(p.amount.minor);
-    document.getElementById('amt').textContent = '₹' + (minor/100).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const minor = BigInt(p.amount.minor);
+    const rupees = minor / 100n;
+    const paise = (minor % 100n).toString().padStart(2, '0');
+    document.getElementById('amt').textContent = '₹' + rupees.toLocaleString('en-IN') + '.' + paise;
     document.getElementById('desc').textContent = p.description || 'Payment to merchant';
-    const stateMap = { CREATED: ['pending','Awaiting payment'], PENDING: ['pending','Pending'], PROCESSING: ['processing','Processing'], SUCCESS: ['verified','Paid'], VERIFIED: ['verified','Payment verified'], FAILED: ['failed','Failed'], EXPIRED: ['expired','Expired'], REFUNDED: ['expired','Refunded'], CANCELLED: ['cancelled','Cancelled'] };
+    document.getElementById('receiver').textContent = p.upi ? 'Payee: ' + p.upi.payeeName : 'Merchant UPI is not configured';
+    document.getElementById('vpa').textContent = p.upi ? 'UPI ID: ' + p.upi.vpa : '';
+    const qr = document.getElementById('qr');
+    const active = ['CREATED', 'PENDING', 'PROCESSING'].includes(p.state);
+    if (active && p.upiUri) { qr.src = '/api/payments/qr/' + encodeURIComponent(token); qr.style.display = 'block'; }
+    else { qr.removeAttribute('src'); qr.style.display = 'none'; }
+    const stateMap = { CREATED: ['pending','Awaiting payment'], PENDING: ['pending','Awaiting settlement verification'], PROCESSING: ['processing','Processing'], SUCCESS: ['verified','Paid'], VERIFIED: ['verified','Payment verified'], FAILED: ['failed','Failed'], EXPIRED: ['expired','Expired'], REFUNDED: ['expired','Refunded'], CANCELLED: ['cancelled','Cancelled'] };
     const [cls, label] = stateMap[p.state] || ['pending', p.state];
     const pill = document.getElementById('statePill');
     pill.className = 'state ' + cls;
     pill.textContent = label;
     const btn = document.getElementById('btn');
-    if (p.state === 'VERIFIED' || p.state === 'SUCCESS') { btn.textContent = 'Demo state: paid'; btn.disabled = true; }
-    else if (p.state === 'CREATED' || p.state === 'PENDING' || p.state === 'PROCESSING') { btn.textContent = 'Sandbox only — no real payment'; btn.disabled = true; }
-    else { btn.textContent = '—'; btn.disabled = true; }
+    btn.onclick = () => { if (p.upiUri && active) window.location.href = p.upiUri; };
+    btn.disabled = !p.upiUri || !active;
+    btn.textContent = p.state === 'VERIFIED' ? 'Payment verified' : (p.upiUri && active ? 'Open UPI app to pay' : (active ? 'UPI payment is not configured' : 'Payment link inactive'));
     const exp = new Date(p.expiresAt);
-    document.getElementById('info').textContent = (p.state === 'CREATED' || p.state === 'PENDING') ? 'Expires ' + exp.toLocaleString() : '';
+    document.getElementById('info').textContent = active ? 'Expires ' + exp.toLocaleString() + ' · Payment remains pending until verified.' : '';
   } catch (e) {
     document.getElementById('statePill').className = 'state failed';
     document.getElementById('statePill').textContent = 'Error';
@@ -158,7 +215,19 @@ export class PayPageController {
       res.header('content-type', 'text/html; charset=utf-8');
       return PAY_HTML;
     }
-    return { amount: p.amount, description: p.description, expiresAt: p.expiresAt, state: p.state };
+    const active = ['CREATED', 'PENDING', 'PROCESSING'].includes(p.state);
+    const settings = active && p.amount.currency === 'INR'
+      ? await this.svc.getStorePaymentSettings(p.merchantId, p.storeId)
+      : null;
+    const upiUri = settings
+      ? upiString({ vpa: settings.upiVpa, payeeName: settings.payeeName,
+          amountMinor: p.amount.minor, currency: p.amount.currency, txnRef: p.id })
+      : null;
+    return {
+      amount: p.amount, description: p.description, expiresAt: p.expiresAt, state: p.state,
+      upi: settings ? { vpa: settings.upiVpa, payeeName: settings.payeeName, phone: settings.phone } : null,
+      upiUri,
+    };
   }
 }
 

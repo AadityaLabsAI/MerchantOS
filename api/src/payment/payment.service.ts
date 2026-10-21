@@ -48,7 +48,7 @@ export class PaymentService {
   }
 
   async getByToken(token: string): Promise<{
-    amount: { currency: string; minor: string }; description: string | null; expiresAt: Date; state: PaymentState; merchantId: string; storeId: string;
+    id: string; amount: { currency: string; minor: string }; description: string | null; expiresAt: Date; state: PaymentState; merchantId: string; storeId: string;
   }> {
     // Expire unpaid sessions on access; a link never remains payable indefinitely.
     await query(
@@ -57,12 +57,47 @@ export class PaymentService {
       [token],
     );
     const r = await query(
-      `SELECT amount_minor, currency, description, expires_at, state, merchant_id, store_id
+      `SELECT id, amount_minor, currency, description, expires_at, state, merchant_id, store_id
          FROM payment_sessions WHERE payment_token = $1`, [token]);
     if (!r.rows[0]) throw new NotFoundException('payment session not found');
     const s = r.rows[0];
-    return { amount: { currency: s.currency, minor: s.amount_minor }, description: s.description,
+    return { id: s.id, amount: { currency: s.currency, minor: s.amount_minor }, description: s.description,
       expiresAt: s.expires_at, state: s.state, merchantId: s.merchant_id, storeId: s.store_id };
+  }
+
+  async getStorePaymentSettings(merchantId: string, storeId: string): Promise<{
+    upiVpa: string; payeeName: string; phone: string | null;
+  } | null> {
+    const r = await query<{ upi_vpa: string; payee_name: string; phone: string | null }>(
+      `SELECT upi_vpa, payee_name, phone
+         FROM store_payment_settings
+        WHERE merchant_id = $1 AND store_id = $2`,
+      [merchantId, storeId],
+    );
+    const row = r.rows[0];
+    return row ? { upiVpa: row.upi_vpa, payeeName: row.payee_name, phone: row.phone } : null;
+  }
+
+  async saveStorePaymentSettings(opts: {
+    merchantId: string; storeId: string; upiVpa: string; payeeName: string; phone: string | null;
+  }): Promise<{ upiVpa: string; payeeName: string; phone: string | null }> {
+    const r = await query<{ upi_vpa: string; payee_name: string; phone: string | null }>(
+      `INSERT INTO store_payment_settings (store_id, merchant_id, upi_vpa, payee_name, phone)
+       SELECT s.id, s.merchant_id, $3, $4, $5
+         FROM stores s
+        WHERE s.id = $1 AND s.merchant_id = $2
+       ON CONFLICT (store_id) DO UPDATE
+         SET upi_vpa = EXCLUDED.upi_vpa,
+             payee_name = EXCLUDED.payee_name,
+             phone = EXCLUDED.phone,
+             updated_at = now()
+         WHERE store_payment_settings.merchant_id = EXCLUDED.merchant_id
+       RETURNING upi_vpa, payee_name, phone`,
+      [opts.storeId, opts.merchantId, opts.upiVpa, opts.payeeName, opts.phone],
+    );
+    const row = r.rows[0];
+    if (!row) throw new NotFoundException('store not found for this merchant');
+    return { upiVpa: row.upi_vpa, payeeName: row.payee_name, phone: row.phone };
   }
 
   /**
