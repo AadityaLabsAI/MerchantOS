@@ -1,0 +1,70 @@
+{
+  "systemSetup": [],
+  "templateName": "custom",
+  "projectDependencies": [
+    {
+      "name": "Install Dependencies",
+      "command": "npm install --no-audit --no-fund"
+    }
+  ],
+  "codeChecks": [
+    {
+      "name": "Type Check",
+      "command": "npx tsc -p api/tsconfig.json --noEmit"
+    }
+  ],
+  "buildSteps": [
+    {
+      "name": "Build Packages",
+      "command": "npm run build:packages"
+    },
+    {
+      "name": "Build Web",
+      "command": "npm run build:web"
+    },
+    {
+      "name": "Build API",
+      "command": "npm run build:api"
+    }
+  ],
+  "runStep": [
+    {
+      "name": "Run Dev Server",
+      "command": "node api/demo-server.cjs --port 4000",
+      "port": "4000"
+    }
+  ],
+  "deploySteps": [
+    {
+      "name": "Build Project",
+      "command": "npm run build"
+    },
+    {
+      "name": "Start Server",
+      "command": "node api/dist/main.js"
+    }
+  ],
+  "cleanupFiles": [
+    "node_modules",
+    "api/node_modules",
+    "web/node_modules",
+    "packages/*/node_modules",
+    "api/dist",
+    "packages/*/dist",
+    "web/dist",
+    "api/src/landing/spa_app.js",
+    "api/src/landing/spa_app.css",
+    "api/src/landing/spa_index.html"
+  ],
+  "packageManager": "npm",
+  "envPaths": [
+    {
+      "name": "root",
+      "path": ".env"
+    },
+    {
+      "name": "api",
+      "path": "api/.env"
+    }
+  ]
+}

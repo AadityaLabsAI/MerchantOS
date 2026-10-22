@@ -18,6 +18,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 
+const __portArg = process.argv.indexOf('--port');
+if (__portArg !== -1 && process.argv[__portArg + 1]) process.env.PORT = process.argv[__portArg + 1];
 const PORT = process.env.PORT || 3000;
 const app = Fastify({ logger: false });
 
